@@ -4,7 +4,6 @@ import subprocess
 import argparse
 import os
 
-VERBOSE = 0
 
 def format_bytes(bytes):
   units = ["B", "KB", "MB", "GB"]
