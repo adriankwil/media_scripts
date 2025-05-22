@@ -3,6 +3,7 @@ import json
 import subprocess
 import argparse
 import os
+import re
 
 
 def format_bytes(bytes):
@@ -13,6 +14,13 @@ def format_bytes(bytes):
     u+=1
   return f"{round(bytes, 2)}{units[u]}"
 
+def match_key(parent_key, match_string):
+  regex = re.compile(rf".*{match_string}.*")
+  for k in parent_key:
+    if regex.match(k):
+      if DEBUG: print(f"found match: {k}")
+      return parent_key.get(k)
+
 def gen_cmd(infile):
   cmd = [
       "ffprobe", "-v", "quiet",
@@ -22,6 +30,10 @@ def gen_cmd(infile):
   ]
   raw = subprocess.run(cmd, stdout=subprocess.PIPE, text=True).stdout
   info = json.loads(raw)
+  streams = info.get("streams")
+
+  if DEBUG:
+    print(f"raw ffprobe output:\n{raw}")
 
   # print header
   file_summary = []
@@ -31,22 +43,26 @@ def gen_cmd(infile):
 
   unwanted_indexes = []
   total_saved = 0
-  for s in info["streams"]:
+  for s in streams:
+    #if DEBUG: print(s)
     rem = ""
-    index = s["index"]
-    typ = s["codec_type"]
-    try: # handle cover.png (among other) streams not having this tag
-      tags = s["tags"]
-    except KeyError:
+    index = s.get("index")
+    typ = s.get("codec_type")
+    tags = s.get("tags")
+    if not tags:
+      if DEBUG: print(f"\"tags\" key doesnt exist, skipping this stream")
       continue
 
-    try: # handle cover.png (among other) streams not having this tag
-      size_bytes = int(tags["NUMBER_OF_BYTES"])
-    except KeyError:
-      continue
+    size_bytes = match_key(tags, "NUMBER_OF_BYTES")
+    if not size_bytes:
+      if DEBUG: print(f"No \"NUMBER_OF_BYTES\" tag found, using 0")
+      size_bytes = 0
+      pass
+    else:
+      size_bytes = int(size_bytes)
 
     if typ!="video":
-      lang = tags["language"]
+      lang = tags.get("language")
     else:
       lang = "-"
 
@@ -76,7 +92,7 @@ def gen_cmd(infile):
     cmd =   f"mv '{infile}' '{infile}.original'"
     cmd +=  f" && ffmpeg -hide_banner -loglevel error -stats -i '{infile}.original' -map 0 {removal} -c copy '{infile}'"
     cmd +=  f" && touch -r '{infile}.original' '{infile}'"
-    cmd +=  f" && rm '{infile}.original'"
+    if not NODEL: cmd +=  f" && rm '{infile}.original'"
     return [cmd, total_saved, file_summary]
 
 
@@ -129,11 +145,15 @@ if __name__ == '__main__':
   parser.add_argument('--debug',
                       action='store_true',
                       help='Set this to give more info on whats going on. (quite verbose)')
+  parser.add_argument('--nodel',
+                      action='store_true',
+                      help='Set this to not delete the original video and just keep it with a .original appendix')
   args = parser.parse_args()
   FILEPATH  = os.path.abspath(args.filepath)
   LANGUAGES = args.languages
   EXECUTE   = args.run
   DEBUG     = args.debug
+  NODEL     = args.nodel
 
 
   if not EXECUTE:
