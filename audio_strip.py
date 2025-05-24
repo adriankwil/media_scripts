@@ -6,38 +6,67 @@ import os
 import re
 
 
-def format_bytes(bytes):
+def format_bytes(bytes:int, dp:int=2) -> list:
+  '''
+  Convert int number of bytes into human readable format with automatic units
+  '''
   units = ["B", "KB", "MB", "GB"]
   u = 0
   while (bytes >= 1024):
     bytes = bytes/1024
     u+=1
-  return f"{round(bytes, 2)}{units[u]}"
+  return f"{round(bytes, dp)}{units[u]}"
 
-def match_key(parent_key, match_string):
+
+def match_key(parent_key: str, match_string: str) -> str:
+  '''
+  Find a regex match for a JSON key whose parent is 'parent_key' and return that key's value
+  '''
   regex = re.compile(rf".*{match_string}.*")
   for k in parent_key:
     if regex.match(k):
       if DEBUG: print(f"found match: {k}")
       return parent_key.get(k)
 
-def gen_cmd(infile):
-  cmd = [
-      "ffprobe", "-v", "quiet",
-      "-print_format", "json",
-      "-show_format", "-show_streams",
-      infile
-  ]
-  raw = subprocess.run(cmd, stdout=subprocess.PIPE, text=True).stdout
+
+def probe_file(file: str):
+  '''
+  Get file stream information using ffprobe in JSON format.
+  '''
+  cmd = f"ffprobe -v quiet -print_format json -show_format -show_streams '{file}'"
+  if DEBUG: print(f"cmd : {cmd}")
+  raw = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True).stdout
+  if DEBUG: print(f"raw ffprobe output:\n{raw}")  # raw = subprocess.run(cmd, stdout=subprocess.PIPE, text=True).stdout
   info = json.loads(raw)
+
+  return info
+
+
+def replace_audio_names(name:str) -> str:
+  if "truehd" in name.lower() and "atmos" in name.lower():
+    return "Atmos THD"
+  elif "truehd" in name.lower():
+    return "TrueHD"
+  else:
+    return name
+
+
+def gen_cmd(infile):
+  '''
+  Generate the bash commands to be run.
+  This follows the general format:
+  1) append '.original' to the original file
+  2) use ffmpeg to delete the unwanted audio tracks
+  2.1) OPTIONALLY copy the first audio track to a TrueHD 5.1 stream if it is DTS HD-MA.
+  3) OPTIONALLY and by defalt delete the original file
+  '''
+  info = probe_file(infile)
   streams = info.get("streams")
 
-  if DEBUG:
-    print(f"raw ffprobe output:\n{raw}")
 
   # print header
   file_summary = []
-  header = f"index\ttype\tlang\tsize"
+  header = f"index\t{'type'.ljust(10)}\tlang\tsize"
   file_summary.append(header)
   if DEBUG: print("header: ", header)
 
@@ -61,11 +90,18 @@ def gen_cmd(infile):
     else:
       size_bytes = int(size_bytes)
 
-    if typ!="video":
-      lang = tags.get("language")
+    if typ != "video":
+      lang  = tags.get("language")
     else:
       lang = "-"
 
+    if typ == "audio":
+      ca    = s.get("profile")
+      if ca == None:
+        ca = s.get("codec_name")
+      ac    = s.get("channels")
+    else:
+      ca,ac = "-",0
 
     size = format_bytes(size_bytes)
 
@@ -74,7 +110,14 @@ def gen_cmd(infile):
       unwanted_indexes.append(index)
       total_saved += size_bytes
 
-    stream_summary = f"{index}\t{typ[0]}\t{lang}\t{size.ljust(10)}{rem}"
+    # replace the typ string with the audio stream profile just for audio streams
+    if typ=="audio":
+      typ=ca
+      typ = replace_audio_names(typ)
+
+    if DEBUG:print(typ)
+
+    stream_summary = f"{index}\t{typ.ljust(10)}\t{lang}\t{size.ljust(10)}{rem}"
     file_summary.append(stream_summary)
     if DEBUG: print(stream_summary)
 
@@ -148,12 +191,16 @@ if __name__ == '__main__':
   parser.add_argument('--nodel',
                       action='store_true',
                       help='Set this to not delete the original video and just keep it with a .original appendix')
+  # parser.add_argument('--thd',
+  #                     action='store_true',
+  #                     help='Set this to check if the first audio track is DTSHD-MA and convert it to be TrueHD 5.1, and set it as the first audio track')
   args = parser.parse_args()
   FILEPATH  = os.path.abspath(args.filepath)
   LANGUAGES = args.languages
   EXECUTE   = args.run
   DEBUG     = args.debug
   NODEL     = args.nodel
+  # THD       = args.thd
 
 
   if not EXECUTE:
