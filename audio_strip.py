@@ -71,6 +71,7 @@ def gen_cmd(infile):
   if DEBUG: print("header: ", header)
 
   unwanted_indexes = []
+  wanted_indexes = []
   total_saved = 0
   for s in streams:
     #if DEBUG: print(s)
@@ -109,22 +110,34 @@ def gen_cmd(infile):
       rem = "<-remove"
       unwanted_indexes.append(index)
       total_saved += size_bytes
-
-    # replace the typ string with the audio stream profile just for audio streams
-    if typ=="audio":
-      typ=ca
-      typ = replace_audio_names(typ)
+    else:
+      wanted_indexes.append([index, ca])
 
     if DEBUG:print(typ)
 
-    stream_summary = f"{index}\t{typ.ljust(10)}\t{lang}\t{size.ljust(10)}{rem}"
+    # replace the typ string with the audio stream profile just for audio streams
+    if typ=="audio":
+      name = replace_audio_names(ca)
+    else:
+      name = typ
+
+
+    if DEBUG:print(name)
+
+    stream_summary = f"{index}\t{name.ljust(10)}\t{lang}\t{size.ljust(10)}{rem}"
     file_summary.append(stream_summary)
     if DEBUG: print(stream_summary)
 
+  if DEBUG: print(f"unwanted_indexes : {unwanted_indexes}")
+  if DEBUG: print(f"wanted_indexes : {wanted_indexes}")
 
   removal = ""
   for i in unwanted_indexes:
     removal = removal + f"-map -0:{i} "
+
+  keep = ""
+  for i,name in wanted_indexes[1:]:
+    keep = keep + f"-map 0:{i} "
 
   non_eng_streams = len(unwanted_indexes)
   if non_eng_streams == 0:
@@ -132,9 +145,15 @@ def gen_cmd(infile):
     return [None,None,None]
   else:
     if DEBUG: print(f"\nFound {non_eng_streams} non english audio/sub streams with indexes: {unwanted_indexes}\n")
-    cmd =   f"mv '{infile}' '{infile}.original'"
-    cmd +=  f" && ffmpeg -hide_banner -loglevel error -stats -i '{infile}.original' -map 0 {removal} -c copy '{infile}'"
-    cmd +=  f" && touch -r '{infile}.original' '{infile}'"
+    cmd   =   f"mv '{infile}' '{infile}.original'"
+    cmd   +=  f" && ffmpeg -hide_banner -loglevel error -stats -i '{infile}.original' -map 0:0"
+    if THD and (wanted_indexes[1][1] == 'DTS-HD MA'):
+      cmd +=  f" -map 0:{wanted_indexes[1][0]}"
+    cmd   +=  f" {keep} -c copy"
+    if THD and (wanted_indexes[1][1] == 'DTS-HD MA'):
+      cmd +=  f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 Title='TrueHD 5.1'"
+    cmd   +=  f" '{infile}'"
+    cmd   +=  f" && touch -r '{infile}.original' '{infile}'"
     if not NODEL: cmd +=  f" && rm '{infile}.original'"
     return [cmd, total_saved, file_summary]
 
@@ -191,26 +210,24 @@ if __name__ == '__main__':
   parser.add_argument('--nodel',
                       action='store_true',
                       help='Set this to not delete the original video and just keep it with a .original appendix')
-  # parser.add_argument('--thd',
-  #                     action='store_true',
-  #                     help='Set this to check if the first audio track is DTSHD-MA and convert it to be TrueHD 5.1, and set it as the first audio track')
+  parser.add_argument('--thd',
+                      action='store_true',
+                      help='Set this to check if the first audio track is DTSHD-MA and convert it to be TrueHD 5.1, and set it as the first audio track')
   args = parser.parse_args()
   FILEPATH  = os.path.abspath(args.filepath)
   LANGUAGES = args.languages
   EXECUTE   = args.run
   DEBUG     = args.debug
   NODEL     = args.nodel
-  # THD       = args.thd
+  THD       = args.thd
 
 
   if not EXECUTE:
-    print("DRYRUN - NO CHANGES WILL BE MADE. ADD '--run' TO MAKE CHANGES\n")
-  print("Removing all languages other than: ", end="")
-  for i,l in enumerate(LANGUAGES):
-    print(l, end="")
-    if i<len(LANGUAGES)-1:
-      print(",", end="")
-  print()
+    print("\nDRYRUN - NO CHANGES WILL BE MADE. ADD '--run' TO MAKE CHANGES\n")
+    print("Would remove all languages other than: ", end="")
+  else:
+    print("Removing all languages other than: ", end="")
+  print(*LANGUAGES, sep=", ")
 
   if os.path.isdir(FILEPATH):
     files = get_files(FILEPATH)
