@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# disable motd
+touch ~/.hushlogin
+
 # safe tools to say yes to 
 apt install vim htop tmux neofetch  -y
 
