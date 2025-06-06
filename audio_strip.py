@@ -73,6 +73,7 @@ def gen_cmd(infile):
   unwanted_indexes = []
   wanted_indexes = []
   total_saved = 0
+  total_kept = 0
   for s in streams:
     #if DEBUG: print(s)
     rem = ""
@@ -112,6 +113,7 @@ def gen_cmd(infile):
       total_saved += size_bytes
     else:
       wanted_indexes.append([index, ca])
+      total_kept += size_bytes
 
     if DEBUG:print(typ)
 
@@ -155,7 +157,7 @@ def gen_cmd(infile):
     cmd   +=  f" '{infile}'"
     cmd   +=  f" && touch -r '{infile}.original' '{infile}'"
     if not NODEL: cmd +=  f" && rm '{infile}.original'"
-    return [cmd, total_saved, file_summary]
+    return [cmd, total_saved, total_kept, file_summary]
 
 
 def get_files(path):
@@ -242,32 +244,35 @@ if __name__ == '__main__':
     print("Working on", FILEPATH)
 
   print()
-  total_space_saved = 0
+  total_bytes_saved = 0
   breakdown = []
   for infile in files:
     if DEBUG: print("infile : ", infile)
-    cmd,saveable_space,file_summary = gen_cmd(infile)
+    cmd,saveable_bytes,kept_bytes,file_summary = gen_cmd(infile)
     if cmd is not None:
-      saveable_space_formatted = format_bytes(saveable_space)
-      breakdown.append([infile, saveable_space_formatted, saveable_space])
-      total_space_saved += saveable_space
+      saveable_space = format_bytes(saveable_bytes)
+      breakdown.append([infile, saveable_space, saveable_bytes])
+      total_bytes_saved += saveable_bytes
       print("\n--------------------------------------------------------------------------------")
       for fs in file_summary:
         print(fs)
-      out_line = f"Space to save: {saveable_space_formatted}"
+      total_bytes = saveable_bytes+kept_bytes
+      total_file_size = format_bytes(total_bytes)
+      percent_saved = f"{(saveable_bytes/total_bytes)*100}"
+      out_line = f"Space to save: {saveable_space}. {percent_saved}% of {total_file_size}"
       print(out_line)
       print("-"*len(out_line))
       print(cmd, "\n")
       if EXECUTE:
         subprocess.run(cmd, shell=True)
 
-  if total_space_saved == 0:
+  if total_bytes_saved == 0:
     print("No files needed thinning")
   else:
     breakdown = sorted(breakdown, key=lambda item: item[-1])
     for b in breakdown:
       print(f"{b[1].ljust(10)} : {b[0].split('/')[-1]}")
     if EXECUTE:
-      print(f"\nTotal Space Saved : {format_bytes(total_space_saved)}")
+      print(f"\nTotal Space Saved : {format_bytes(total_bytes_saved)}")
     else:
-      print(f"\nTotal saveable space : {format_bytes(total_space_saved)}")
+      print(f"\nTotal saveable space : {format_bytes(total_bytes_saved)}")
