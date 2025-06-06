@@ -193,7 +193,7 @@ if __name__ == '__main__':
     return [v.strip() for v in value.split(',') if v.strip()]
 
   parser = argparse.ArgumentParser(prog='audio_strip.py',
-                                   description='Remove all unwanted language audio tracks from video files to save space.\nDEFAULT BEHVAIOUR is to DRY-RUN, making no changes.', formatter_class=argparse.RawTextHelpFormatter)
+                                   description='Remove all unwanted language audio tracks from video files to save space.\nDEFAULT BEHVAIOUR is to DRY-RUN, making no changes.\nRequires ffmpeg installed, ideally version 7.1+ for good TrueHD compatibility (libavcodec 61.19.101 has been used for development)', formatter_class=argparse.RawTextHelpFormatter)
   parser.add_argument('filepath',
                       help='File or Folder to target')
   parser.add_argument('-l',
