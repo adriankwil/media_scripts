@@ -251,15 +251,15 @@ if __name__ == '__main__':
     cmd,saveable_bytes,kept_bytes,file_summary = gen_cmd(infile)
     if cmd is not None:
       saveable_space = format_bytes(saveable_bytes)
-      breakdown.append([infile, saveable_space, saveable_bytes])
+      total_bytes = saveable_bytes+kept_bytes
+      total_file_size = format_bytes(total_bytes)
+      percent_saved = int((saveable_bytes/total_bytes)*100)
+      breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size])
       total_bytes_saved += saveable_bytes
       print("\n--------------------------------------------------------------------------------")
       for fs in file_summary:
         print(fs)
-      total_bytes = saveable_bytes+kept_bytes
-      total_file_size = format_bytes(total_bytes)
-      percent_saved = f"{(saveable_bytes/total_bytes)*100}"
-      out_line = f"Space to save: {saveable_space}. {percent_saved}% of {total_file_size}"
+      out_line = f"Space to save: {saveable_space}.  ({percent_saved}% of {total_file_size})"
       print(out_line)
       print("-"*len(out_line))
       print(cmd, "\n")
@@ -269,9 +269,9 @@ if __name__ == '__main__':
   if total_bytes_saved == 0:
     print("No files needed thinning")
   else:
-    breakdown = sorted(breakdown, key=lambda item: item[-1])
+    breakdown = sorted(breakdown, key=lambda item: item[2])
     for b in breakdown:
-      print(f"{b[1].ljust(10)} : {b[0].split('/')[-1]}")
+      print(f"{b[1].ljust(10)} ({b[3]}% of {b[4]}) : {b[0].split('/')[-1]}")
     if EXECUTE:
       print(f"\nTotal Space Saved : {format_bytes(total_bytes_saved)}")
     else:
