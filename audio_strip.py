@@ -44,7 +44,7 @@ def probe_file(file: str):
 
 def replace_audio_names(name:str) -> str:
   if "truehd" in name.lower() and "atmos" in name.lower():
-    return "Atmos THD"
+    return "THD Atmos"
   elif "truehd" in name.lower():
     return "TrueHD"
   elif "dolby digital plus + dolby atmos" == name.lower():
