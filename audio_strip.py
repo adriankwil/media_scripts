@@ -47,6 +47,8 @@ def replace_audio_names(name:str) -> str:
     return "Atmos THD"
   elif "truehd" in name.lower():
     return "TrueHD"
+  elif "dolby digital plus + dolby atmos" == name.lower():
+    return "DD+ Atmos"
   else:
     return name
 
