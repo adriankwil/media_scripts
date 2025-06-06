@@ -21,3 +21,8 @@ git config --global core.editor "vim"
 
 # add neofetch to .profile
 echo "neofetch" >> ~/.profile
+
+# modify the samba generation script to get rid of the server type as im only using SMB
+sudo sed -i 's/ - SMB\/CIFS//g' /srv/salt/omv/deploy/avahi/services/smb.sls
+# then restart the server
+sudo omv-salt deploy run avahi
