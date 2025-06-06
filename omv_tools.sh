@@ -18,6 +18,9 @@ apt install vim htop tmux neofetch curl man -y
 git config --global alias.st status
 # make vim default git editor
 git config --global core.editor "vim"
+# add name to git
+git config --global user.name "adrian"
+git config --global user.email "adriankwil@gmail.com"
 
 # add neofetch to .profile
 echo "neofetch" >> ~/.profile
