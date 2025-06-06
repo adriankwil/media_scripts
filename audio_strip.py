@@ -144,7 +144,7 @@ def gen_cmd(infile):
   non_eng_streams = len(unwanted_indexes)
   if non_eng_streams == 0:
     if DEBUG: print("No unwanted audio or sub streams in this file.")
-    return [None,None,None]
+    return [None,None,None,None]
   else:
     if DEBUG: print(f"\nFound {non_eng_streams} non english audio/sub streams with indexes: {unwanted_indexes}\n")
     cmd   =   f"mv '{infile}' '{infile}.original'"
