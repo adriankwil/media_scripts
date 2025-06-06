@@ -4,6 +4,7 @@
 echo "PS1='\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w \$\[\033[00m\] '" >> .bashrc
 echo "alias la='ls $LS_OPTIONS -lah'" >> ~/.bashrc
 echo "alias vpn_test='curl -sS https://am.i.mullvad.net/connected'" >> ~/.bashrc
+echo "alias audio_strip='python3 ~/media_scripts/audio_strip.py'" >> ~/.bashrc
 
 # disable motd
 touch ~/.hushlogin
