@@ -193,7 +193,7 @@ if __name__ == '__main__':
     return [v.strip() for v in value.split(',') if v.strip()]
 
   parser = argparse.ArgumentParser(prog='audio_strip.py',
-                                   description='Remove all unwanted language audio tracks from video files to save space.')
+                                   description='Remove all unwanted language audio tracks from video files to save space.\nDEFAULT BEHVAIOUR is to DRY-RUN, making no changes.', formatter_class=argparse.RawTextHelpFormatter)
   parser.add_argument('filepath',
                       help='File or Folder to target')
   parser.add_argument('-l',
