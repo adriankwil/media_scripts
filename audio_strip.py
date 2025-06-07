@@ -255,7 +255,10 @@ if __name__ == '__main__':
       saveable_space = format_bytes(saveable_bytes)
       total_bytes = saveable_bytes+kept_bytes
       total_file_size = format_bytes(total_bytes)
-      percent_saved = int((saveable_bytes/total_bytes)*100)
+      if total_bytes:
+        percent_saved = int((saveable_bytes/total_bytes)*100)
+      else:
+        percent_saved = 0
       breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size])
       total_bytes_saved += saveable_bytes
       print("\n--------------------------------------------------------------------------------")
@@ -273,7 +276,9 @@ if __name__ == '__main__':
   else:
     breakdown = sorted(breakdown, key=lambda item: item[2])
     for b in breakdown:
-      print(f"{b[1].ljust(10)} ({b[3]}% of {b[4]}) : {b[0].split('/')[-1]}")
+      saved = f"{b[1]}"
+      percent = f"({b[3]}% of {b[4]})"
+      print(f"{saved.ljust(10)} {percent.ljust(17)} : {b[0].split('/')[-1]}")
     if EXECUTE:
       print(f"\nTotal Space Saved : {format_bytes(total_bytes_saved)}")
     else:
