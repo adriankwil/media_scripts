@@ -53,6 +53,20 @@ def replace_audio_names(name:str) -> str:
     return name
 
 
+def parse_ac(ac: int) -> str:
+    '''
+    Convert the raw number of channels into human readable format.
+    eg: 2 becomes 2.0 and 6 becomes 5.1
+
+    '''
+    if ac == 0:
+      return "  "
+    elif ac > 2:
+      return f"{ac-1}.1"
+    else:
+      return F"{ac}.0"
+
+
 def gen_cmd(infile):
   '''
   Generate the bash commands to be run.
@@ -127,8 +141,8 @@ def gen_cmd(infile):
 
 
     if DEBUG:print(name)
-
-    stream_summary = f"{index}\t{name.ljust(10)}\t{lang}\t{size.ljust(10)}{rem}"
+    audio_channels = parse_ac(ac)
+    stream_summary = f"{index}\t{name.ljust(10)}{audio_channels}\t{lang}\t{size.ljust(10)}{rem}"
     file_summary.append(stream_summary)
     if DEBUG: print(stream_summary)
 
