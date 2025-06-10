@@ -37,3 +37,12 @@ echo "neofetch" >> ~/.profile
 sudo sed -i 's/ - SMB\/CIFS//g' /srv/salt/omv/deploy/avahi/services/smb.sls
 # then restart the server
 sudo omv-salt deploy run avahi
+
+
+# make tab-autocomlete case-insensitive:
+# If ~/.inputrc doesn't exist yet: First include the original /etc/inputrc
+# so it won't get overriden
+if [ ! -a ~/.inputrc ]; then echo '$include /etc/inputrc' > ~/.inputrc; fi
+
+# Add shell-option to ~/.inputrc to enable case-insensitive tab completion
+echo 'set completion-ignore-case On' >> ~/.inputrc
