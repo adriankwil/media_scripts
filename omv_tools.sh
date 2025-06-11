@@ -49,3 +49,6 @@ echo 'set completion-ignore-case On' >> ~/.inputrc
 
 # enable case-insensitive search in less and also enable colored output
 export LESS="IR"
+
+# install croc
+curl https://getcroc.schollz.com | bash
