@@ -102,8 +102,15 @@ def gen_cmd(infile):
 
     size_bytes = match_key(tags, "NUMBER_OF_BYTES")
     if not size_bytes:
-      if DEBUG: print(f"No \"NUMBER_OF_BYTES\" tag found, using 0")
-      size_bytes = 0
+      if DEBUG: print(f"No \"NUMBER_OF_BYTES\" tag found, will try to calculate size from bit rate*time")
+      duration = s.get("duration")
+      bit_rate = s.get("bit_rate")
+      if DEBUG: print(F"duration: {duration}, bit_rate: {bit_rate}")
+      if duration and bit_rate:
+        size_bytes = (float(duration)*int(bit_rate))/8
+      else:
+        if DEBUG: print(f"No \"NUMBER_OF_BYTES\" tag found and unable to calculate from rate*time. Using 0.")
+        size_bytes = 0
       pass
     else:
       size_bytes = int(size_bytes)
@@ -177,9 +184,12 @@ def gen_cmd(infile):
 
 
 def get_files(path):
-  cmd = ["find", f"{path}", "-type", "f", "-name", "*.mkv"]
-  raw = subprocess.run(cmd, stdout=subprocess.PIPE, text=True).stdout
-  raw_list = raw.split("\n")
+  extensions = ["mkv", "mp4"]
+  raw_list = []
+  for e in extensions:
+    cmd = ["find", f"{path}", "-type", "f", "-name", f"*.{e}"]
+    raw = subprocess.run(cmd, stdout=subprocess.PIPE, text=True).stdout
+    raw_list += raw.split("\n")
   raw_list = list(filter(None, raw_list)) # remove empty items
   if DEBUG:
     print(len(raw_list))
@@ -249,12 +259,12 @@ if __name__ == '__main__':
 
   if os.path.isdir(FILEPATH):
     files = get_files(FILEPATH)
-    print("Working on all .mkv files in", FILEPATH, "(recursive)")
+    print("Working on all video files in", FILEPATH, "(recursive)")
     if len(files)>0:
-      print(f"Found {len(files)} .mkv files:")
+      print(f"Found {len(files)} video files:")
       for f in files: print(f)
     else:
-      print("Found no .mkv file(s) in this dir")
+      print("Found no video file(s) in this dir")
   elif os.path.isfile(FILEPATH):
     files = [FILEPATH]
     print("Working on", FILEPATH)
