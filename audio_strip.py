@@ -33,7 +33,7 @@ def probe_file(file: str):
   '''
   Get file stream information using ffprobe in JSON format.
   '''
-  cmd = f"ffprobe -v quiet -print_format json -show_format -show_streams '{file}'"
+  cmd = f"ffprobe -v quiet -print_format json -show_format -show_streams \"{file}\""
   if DEBUG: print(f"cmd : {cmd}")
   raw = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True).stdout
   if DEBUG: print(f"raw ffprobe output:\n{raw}")  # raw = subprocess.run(cmd, stdout=subprocess.PIPE, text=True).stdout
@@ -170,16 +170,16 @@ def gen_cmd(infile):
     return [None,None,None,None]
   else:
     if DEBUG: print(f"\nFound {non_eng_streams} non english audio/sub streams with indexes: {unwanted_indexes}\n")
-    cmd   =   f"mv '{infile}' '{infile}.original'"
-    cmd   +=  f" && ffmpeg -hide_banner -loglevel error -stats -i '{infile}.original' -map 0:0"
+    cmd   =   f"mv \"{infile}\" \"{infile}.original\""
+    cmd   +=  f" && ffmpeg -hide_banner -loglevel error -stats -i \"{infile}.original\" -map 0:0"
     if THD and (wanted_indexes[1][1] == 'DTS-HD MA'):
       cmd +=  f" -map 0:{wanted_indexes[1][0]}"
     cmd   +=  f" {keep} -c copy"
     if THD and (wanted_indexes[1][1] == 'DTS-HD MA'):
-      cmd +=  f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 Title='TrueHD 5.1'"
-    cmd   +=  f" '{infile}'"
-    cmd   +=  f" && touch -r '{infile}.original' '{infile}'"
-    if not NODEL: cmd +=  f" && rm '{infile}.original'"
+      cmd +=  f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 Title=\"TrueHD 5.1\""
+    cmd   +=  f" \"{infile}\""
+    cmd   +=  f" && touch -r \"{infile}.original\" \"{infile}\""
+    if not NODEL: cmd +=  f" && rm \"{infile}.original\""
     return [cmd, total_saved, total_kept, file_summary]
 
 
