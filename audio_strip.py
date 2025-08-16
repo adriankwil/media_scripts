@@ -43,6 +43,9 @@ def probe_file(file: str):
 
 
 def replace_audio_names(name:str) -> str:
+  '''
+  Convert ffmpeg output to be more human readable. Used primarily for printing out the track list.
+  '''
   if "truehd" in name.lower() and "atmos" in name.lower():
     return "THD Atmos"
   elif "truehd" in name.lower():
@@ -184,6 +187,9 @@ def gen_cmd(infile):
 
 
 def get_files(path):
+  '''
+  Get all movie files in a given directory
+  '''
   extensions = ["mkv", "mp4"]
   raw_list = []
   for e in extensions:
