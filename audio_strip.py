@@ -82,6 +82,25 @@ def gen_cmd(infile):
   info = probe_file(infile)
   streams = info.get("streams")
 
+  # Find the language of the first audio track
+  first_audio_lang = None
+  for s in streams:
+      if s.get("codec_type") == "audio":
+          tags = s.get("tags")
+          if tags and tags.get("language"):
+              first_audio_lang = tags.get("language")
+              if DEBUG: print(f"Detected first audio track language: {first_audio_lang}")
+              break # Found it, no need to look further
+
+  # Create a set of languages to keep for audio tracks
+  audio_languages_to_keep = set(LANGUAGES)
+  if first_audio_lang:
+      audio_languages_to_keep.add(first_audio_lang)
+
+  if DEBUG:
+      print(f"Languages to keep for audio: {list(audio_languages_to_keep)}")
+      print(f"Languages to keep for subtitles: {LANGUAGES}")
+
 
   # print header
   file_summary = []
@@ -133,7 +152,14 @@ def gen_cmd(infile):
 
     size = format_bytes(size_bytes)
 
-    if (typ=="audio" or typ=="subtitle") and (lang not in LANGUAGES):
+    # Determine if the stream should be removed
+    remove_stream = False
+    if typ == "audio" and lang not in audio_languages_to_keep:
+        remove_stream = True
+    elif typ == "subtitle" and lang not in LANGUAGES:
+        remove_stream = True
+
+    if remove_stream:
       rem = "<-remove"
       unwanted_indexes.append(index)
       total_saved += size_bytes
@@ -164,21 +190,29 @@ def gen_cmd(infile):
     removal = removal + f"-map -0:{i} "
 
   keep = ""
+  # wanted_indexes[0] is the video stream, which is handled by -map 0:0
+  # so we only need to map the other wanted streams
   for i,name in wanted_indexes[1:]:
     keep = keep + f"-map 0:{i} "
 
   non_eng_streams = len(unwanted_indexes)
-  if non_eng_streams == 0:
-    if DEBUG: print("No unwanted audio or sub streams in this file.")
+  # Check if there are any streams to remove OR if THD conversion is requested
+  is_dtshd_ma = THD and len(wanted_indexes) > 1 and 'DTS-HD MA' in wanted_indexes[1][1]
+  if (non_eng_streams == 0) and (not is_dtshd_ma):
+    if DEBUG: print("No unwanted streams in this file and DTSHDMA->THD conversion is not applicable/enabled.")
     return [None,None,None,None]
   else:
-    if DEBUG: print(f"\nFound {non_eng_streams} non english audio/sub streams with indexes: {unwanted_indexes}\n")
+    if DEBUG: print(f"\nFound {non_eng_streams} unwanted audio/sub streams with indexes: {unwanted_indexes}\n")
     cmd   =   f"mv \"{infile}\" \"{infile}.original\""
     cmd   +=  f" && ffmpeg -hide_banner -loglevel error -stats -i \"{infile}.original\" -map 0:0"
-    if THD and (wanted_indexes[1][1] == 'DTS-HD MA'):
+    if is_dtshd_ma:
+      # Map the DTS-HD MA stream first for conversion
       cmd +=  f" -map 0:{wanted_indexes[1][0]}"
-    cmd   +=  f" {keep} -c copy"
-    if THD and (wanted_indexes[1][1] == 'DTS-HD MA'):
+    cmd   +=  f" {keep}"
+    cmd   +=  f" {removal}" # Add the removal maps
+    cmd   +=  f" -c copy"
+    if is_dtshd_ma:
+      # Apply conversion to the first audio stream in the output (which is now the DTS-HD MA stream)
       cmd +=  f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 Title=\"TrueHD 5.1\""
     cmd   +=  f" \"{infile}\""
     cmd   +=  f" && touch -r \"{infile}.original\" \"{infile}\""
@@ -228,13 +262,14 @@ if __name__ == '__main__':
 
   parser = argparse.ArgumentParser(prog='audio_strip.py',
                                    description='Remove all unwanted language audio tracks from video files to save space.\nDEFAULT BEHVAIOUR is to DRY-RUN, making no changes.\nRequires ffmpeg installed, ideally version 7.1+ for good TrueHD compatibility (libavcodec 61.19.101 has been used for development)', formatter_class=argparse.RawTextHelpFormatter)
-  parser.add_argument('filepath',
-                      help='File or Folder to target')
+  parser.add_argument('filepaths',
+                      nargs='+',
+                      help='One or more files or folders to target')
   parser.add_argument('-l',
                       '--languages',
                       type=comma_separated_list,
                       default=['eng'],
-                      help='Languages to keep. Default is eng')
+                      help='Languages to keep for subtitles. Audio tracks for these languages will also be kept, in addition to the language of the first audio track. Default is eng')
   parser.add_argument('--run',
                       action='store_true',
                       help='Actually run the commands. Default is False and will just print the commands to be run ')
@@ -248,7 +283,7 @@ if __name__ == '__main__':
                       action='store_true',
                       help='Set this to check if the first audio track is DTSHD-MA and convert it to be TrueHD 5.1, and set it as the first audio track')
   args = parser.parse_args()
-  FILEPATH  = os.path.abspath(args.filepath)
+  FILEPATHS = args.filepaths
   LANGUAGES = args.languages
   EXECUTE   = args.run
   DEBUG     = args.debug
@@ -258,22 +293,34 @@ if __name__ == '__main__':
 
   if not EXECUTE:
     print("\nDRYRUN - NO CHANGES WILL BE MADE. ADD '--run' TO MAKE CHANGES\n")
-    print("Would remove all languages other than: ", end="")
+    print("Would remove all subtitle languages other than: ", ", ".join(LANGUAGES))
+    print("Would also keep audio tracks matching the first audio track's language.")
   else:
-    print("Removing all languages other than: ", end="")
-  print(*LANGUAGES, sep=", ")
+    print("Processing files...")
+    if THD:
+      print("Generate TrueHD audio track from DTS-HD MA and make it the first track if applicable.")
 
-  if os.path.isdir(FILEPATH):
-    files = get_files(FILEPATH)
-    print("Working on all video files in", FILEPATH, "(recursive)")
-    if len(files)>0:
-      print(f"Found {len(files)} video files:")
-      for f in files: print(f)
-    else:
-      print("Found no video file(s) in this dir")
-  elif os.path.isfile(FILEPATH):
-    files = [FILEPATH]
-    print("Working on", FILEPATH)
+  files = []
+  for path in FILEPATHS:
+      abs_path = os.path.abspath(path)
+      if os.path.isdir(abs_path):
+          print("Searching for video files in", abs_path, "(recursive)")
+          files.extend(get_files(abs_path))
+      elif os.path.isfile(abs_path):
+          files.append(abs_path)
+      else:
+          print(f"Warning: Path '{path}' is not a valid file or directory. Skipping.")
+
+  # Remove duplicates that might occur if a file and its parent folder are both specified
+  files = sorted(list(set(files)))
+
+  if len(files) > 0:
+      print(f"\nFound {len(files)} video file(s) to process:")
+      for f in files:
+          print(f)
+  else:
+      print("Found no video file(s) to process.")
+
 
   print()
   total_bytes_saved = 0
