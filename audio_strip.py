@@ -200,7 +200,7 @@ def gen_cmd(infile):
   is_dtshd_ma = THD and len(wanted_indexes) > 1 and 'DTS-HD MA' in wanted_indexes[1][1]
   if (non_eng_streams == 0) and (not is_dtshd_ma):
     if DEBUG: print("No unwanted streams in this file and DTSHDMA->THD conversion is not applicable/enabled.")
-    return [None,None,None,None]
+    return [None,None,None,None,None]
   else:
     if DEBUG: print(f"\nFound {non_eng_streams} unwanted audio/sub streams with indexes: {unwanted_indexes}\n")
     cmd   =   f"mv \"{infile}\" \"{infile}.original\""
@@ -217,7 +217,7 @@ def gen_cmd(infile):
     cmd   +=  f" \"{infile}\""
     cmd   +=  f" && touch -r \"{infile}.original\" \"{infile}\""
     if not NODEL: cmd +=  f" && rm \"{infile}.original\""
-    return [cmd, total_saved, total_kept, file_summary]
+    return [cmd, total_saved, total_kept, file_summary, sorted(list(audio_languages_to_keep))]
 
 
 def get_files(path):
@@ -327,7 +327,7 @@ if __name__ == '__main__':
   breakdown = []
   for infile in files:
     if DEBUG: print("infile : ", infile)
-    cmd,saveable_bytes,kept_bytes,file_summary = gen_cmd(infile)
+    cmd,saveable_bytes,kept_bytes,file_summary,langs_kept = gen_cmd(infile)
     if cmd is not None:
       saveable_space = format_bytes(saveable_bytes)
       total_bytes = saveable_bytes+kept_bytes
@@ -339,6 +339,7 @@ if __name__ == '__main__':
       breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size])
       total_bytes_saved += saveable_bytes
       print("\n--------------------------------------------------------------------------------")
+      print(f"Keeping languages: {', '.join(langs_kept)}")
       for fs in file_summary:
         print(fs)
       out_line = f"Space to save: {saveable_space}.  ({percent_saved}% of {total_file_size})"
