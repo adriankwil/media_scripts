@@ -154,31 +154,30 @@ def gen_cmd(infile):
   if DEBUG: print(f"unwanted_indexes : {unwanted_indexes}")
   if DEBUG: print(f"wanted_indexes : {wanted_indexes}")
 
-  removal = ""
-  for i in unwanted_indexes:
-    removal = removal + f"-map -0:{i} "
+  # Check for THD conversion condition first
+  is_dts_hd_ma = THD and len(wanted_indexes) > 1 and wanted_indexes[1][1] == 'DTS-HD MA'
 
+  if not is_dts_hd_ma:
+      if DEBUG: print("No DTS-HD MA track found for THD conversion.")
+      return [None, None, None, None]
+
+  # Build the ffmpeg command
   keep = ""
   for i,name in wanted_indexes[1:]:
     keep = keep + f"-map 0:{i} "
 
-  non_eng_streams = len(unwanted_indexes)
-  if non_eng_streams == 0:
-    if DEBUG: print("No unwanted audio or sub streams in this file.")
-    return [None,None,None,None]
-  else:
-    if DEBUG: print(f"\nFound {non_eng_streams} non english audio/sub streams with indexes: {unwanted_indexes}\n")
-    cmd   =   f"mv \"{infile}\" \"{infile}.original\""
-    cmd   +=  f" && ffmpeg -hide_banner -loglevel error -stats -i \"{infile}.original\" -map 0:0"
-    if THD and (wanted_indexes[1][1] == 'DTS-HD MA'):
-      cmd +=  f" -map 0:{wanted_indexes[1][0]}"
-    cmd   +=  f" {keep} -c copy"
-    if THD and (wanted_indexes[1][1] == 'DTS-HD MA'):
-      cmd +=  f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 Title=\"TrueHD 5.1\""
-    cmd   +=  f" \"{infile}\""
-    cmd   +=  f" && touch -r \"{infile}.original\" \"{infile}\""
-    if not NODEL: cmd +=  f" && rm \"{infile}.original\""
-    return [cmd, total_saved, total_kept, file_summary]
+  cmd   =   f"mv \"{infile}\" \"{infile}.original\""
+  cmd   +=  f" && ffmpeg -hide_banner -loglevel error -stats -i \"{infile}.original\" -map 0:0"
+  # Map the DTS-HD MA track first for conversion
+  cmd   +=  f" -map 0:{wanted_indexes[1][0]}"
+  # Map all other streams to be copied
+  cmd   +=  f" {keep} -c copy"
+  # Add the conversion command for the first audio stream (a:0)
+  cmd   +=  f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 Title=\"TrueHD 5.1\""
+  cmd   +=  f" \"{infile}\""
+  cmd   +=  f" && touch -r \"{infile}.original\" \"{infile}\""
+  if not NODEL: cmd +=  f" && rm \"{infile}.original\""
+  return [cmd, total_saved, total_kept, file_summary]
 
 
 def get_files(path):
@@ -214,10 +213,11 @@ def get_files(path):
 
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser(prog='audio_strip.py',
+  parser = argparse.ArgumentParser(prog='thd.py',
                                    description='Find movies that have DTS-HD MA as their default audio track and no TrueHD track present, and create a THD track from the DTS-HD MA track and set it as default.\nDEFAULT BEHVAIOUR is to DRY-RUN, making no changes.\nRequires ffmpeg installed, ideally version 7.1+ for good TrueHD compatibility (libavcodec 61.19.101 has been used for development)', formatter_class=argparse.RawTextHelpFormatter)
-  parser.add_argument('filepath',
-                      help='File or Folder to target')
+  parser.add_argument('filepaths',
+                      nargs='+',
+                      help='One or more files or folders to target')
   parser.add_argument('--run',
                       action='store_true',
                       help='Actually run the commands. Default is False and will just print the commands to be run ')
@@ -228,7 +228,7 @@ if __name__ == '__main__':
                       action='store_true',
                       help='Set this to not delete the original video and just keep it with a .original appendix')
   args = parser.parse_args()
-  FILEPATH  = os.path.abspath(args.filepath)
+  FILEPATHS = args.filepaths
   EXECUTE   = args.run
   DEBUG     = args.debug
   NODEL     = args.nodel
@@ -240,17 +240,27 @@ if __name__ == '__main__':
   else:
     print("Generate TrueHD audio track from DTS-HD MA and make it the first track.")
 
-  if os.path.isdir(FILEPATH):
-    files = get_files(FILEPATH)
-    print("Working on all video files in", FILEPATH, "(recursive)")
-    if len(files)>0:
-      print(f"Found {len(files)} video files:")
-      for f in files: print(f)
-    else:
-      print("Found no video file(s) in this dir")
-  elif os.path.isfile(FILEPATH):
-    files = [FILEPATH]
-    print("Working on", FILEPATH)
+  files = []
+  for path in FILEPATHS:
+      abs_path = os.path.abspath(path)
+      if os.path.isdir(abs_path):
+          print("Searching for video files in", abs_path, "(recursive)")
+          files.extend(get_files(abs_path))
+      elif os.path.isfile(abs_path):
+          files.append(abs_path)
+      else:
+          print(f"Warning: Path '{path}' is not a valid file or directory. Skipping.")
+
+  # Remove duplicates that might occur if a file and its parent folder are both specified
+  files = sorted(list(set(files)))
+
+  if len(files) > 0:
+      print(f"\nFound {len(files)} video file(s) to process:")
+      for f in files:
+          print(f)
+  else:
+      print("Found no video file(s) to process.")
+
 
   print()
   total_bytes_saved = 0
