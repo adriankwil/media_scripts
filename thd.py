@@ -36,7 +36,7 @@ def probe_file(file: str):
   cmd = f"ffprobe -v quiet -print_format json -show_format -show_streams \"{file}\""
   if DEBUG: print(f"cmd : {cmd}")
   raw = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True).stdout
-  if DEBUG: print(f"raw ffprobe output:\n{raw}")  # raw = subprocess.run(cmd, stdout=subprocess.PIPE, text=True).stdout
+  if DEBUG: print(f"raw ffprobe output:\n{raw}")
   info = json.loads(raw)
 
   return info
@@ -75,13 +75,11 @@ def gen_cmd(infile):
   Generate the bash commands to be run.
   This follows the general format:
   1) append '.original' to the original file
-  2) use ffmpeg to delete the unwanted audio tracks
-  2.1) OPTIONALLY copy the first audio track to a TrueHD 5.1 stream if it is DTS HD-MA.
-  3) OPTIONALLY and by defalt delete the original file
+  2) use ffmpeg to create a new file with an added TrueHD track from the first DTS-HD MA track.
+  3) OPTIONALLY and by default delete the original file
   '''
   info = probe_file(infile)
   streams = info.get("streams")
-
 
   # print header
   file_summary = []
@@ -89,13 +87,11 @@ def gen_cmd(infile):
   file_summary.append(header)
   if DEBUG: print("header: ", header)
 
-  unwanted_indexes = []
-  wanted_indexes = []
-  total_saved = 0
-  total_kept = 0
+  dts_hd_ma_stream = None
+  has_truehd = False
+  video_stream_index = None
+
   for s in streams:
-    #if DEBUG: print(s)
-    rem = ""
     index = s.get("index")
     typ = s.get("codec_type")
     tags = s.get("tags")
@@ -114,70 +110,63 @@ def gen_cmd(infile):
       else:
         if DEBUG: print(f"No \"NUMBER_OF_BYTES\" tag found and unable to calculate from rate*time. Using 0.")
         size_bytes = 0
-      pass
     else:
       size_bytes = int(size_bytes)
 
-    if typ != "video":
-      lang  = tags.get("language")
-    else:
-      lang = "-"
-
-    if typ == "audio":
-      ca    = s.get("profile")
-      if ca == None:
-        ca = s.get("codec_name")
-      ac    = s.get("channels")
-    else:
-      ca,ac = "-",0
-
+    lang = tags.get("language") if typ != "video" else "-"
+    profile = s.get("profile") or s.get("codec_name")
+    ac = s.get("channels") if typ == "audio" else 0
     size = format_bytes(size_bytes)
-
-    wanted_indexes.append([index, ca])
-    total_kept += size_bytes
-
-    if DEBUG:print(typ)
-
-    # replace the typ string with the audio stream profile just for audio streams
-    if typ=="audio":
-      name = replace_audio_names(ca)
-    else:
-      name = typ
-
-
-    if DEBUG:print(name)
+    name = replace_audio_names(profile) if typ == "audio" else typ
     audio_channels = parse_ac(ac)
-    stream_summary = f"{index}\t{name.ljust(10)}{audio_channels}\t{lang}\t{size.ljust(10)}{rem}"
+
+    stream_summary = f"{index}\t{name.ljust(10)}{audio_channels}\t{lang}\t{size.ljust(10)}"
     file_summary.append(stream_summary)
     if DEBUG: print(stream_summary)
 
-  if DEBUG: print(f"unwanted_indexes : {unwanted_indexes}")
-  if DEBUG: print(f"wanted_indexes : {wanted_indexes}")
+    if typ == "video" and video_stream_index is None:
+        video_stream_index = index
 
-  # Check for THD conversion condition first
-  is_dts_hd_ma = THD and len(wanted_indexes) > 1 and wanted_indexes[1][1] == 'DTS-HD MA'
+    if typ == "audio":
+        if profile == 'DTS-HD MA' and dts_hd_ma_stream is None:
+            dts_hd_ma_stream = s
+        if 'truehd' in (profile or "").lower():
+            has_truehd = True
 
-  if not is_dts_hd_ma:
-      if DEBUG: print("No DTS-HD MA track found for THD conversion.")
-      return [None, None, None, None]
+  if not dts_hd_ma_stream or has_truehd:
+      if DEBUG:
+          if not dts_hd_ma_stream: print("No DTS-HD MA track found for conversion.")
+          if has_truehd: print("File already contains a TrueHD track.")
+      return [None, file_summary]
+
+  dts_index = dts_hd_ma_stream.get("index")
 
   # Build the ffmpeg command
-  keep = ""
-  for i,name in wanted_indexes[1:]:
-    keep = keep + f"-map 0:{i} "
-
   cmd   =   f"mv \"{infile}\" \"{infile}.original\""
-  cmd   +=  f" && ffmpeg -hide_banner -loglevel error -stats -i \"{infile}.original\" -map 0:0"
-  # Map the DTS-HD MA track first for conversion
-  cmd   +=  f" -map 0:{wanted_indexes[1][0]}"
-  # Map all other streams to be copied
-  cmd   +=  f" {keep} -c copy"
-  # Add the conversion command for the first audio stream (a:0)
-  cmd   +=  f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 Title=\"TrueHD 5.1\""
+  cmd   +=  f" && ffmpeg -hide_banner -loglevel error -stats -i \"{infile}.original\""
+  # Map streams in the desired order
+  # 1. Video stream
+  if video_stream_index is not None:
+      cmd += f" -map 0:{video_stream_index}"
+  # 2. The DTS-HD MA stream that will be converted to TrueHD
+  cmd   +=  f" -map 0:{dts_index}"
+  # 3. All original audio streams
+  cmd   +=  f" -map 0:a"
+  # 4. All original subtitle streams
+  cmd   +=  f" -map 0:s?"
+  # Copy all streams except the new audio track
+  cmd   +=  f" -c copy"
+  # Convert the first mapped audio stream (our new track) to TrueHD
+  cmd   +=  f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 title=\"TrueHD 5.1\""
+  # Set the new TrueHD track as the default audio stream
+  cmd   +=  f" -disposition:a:0 default"
+  # Set the original default audio stream to not be default anymore
+  cmd   +=  f" -disposition:a:1 0"
   cmd   +=  f" \"{infile}\""
   cmd   +=  f" && touch -r \"{infile}.original\" \"{infile}\""
   if not NODEL: cmd +=  f" && rm \"{infile}.original\""
-  return [cmd, total_saved, total_kept, file_summary]
+
+  return [cmd, file_summary]
 
 
 def get_files(path):
@@ -232,13 +221,11 @@ if __name__ == '__main__':
   EXECUTE   = args.run
   DEBUG     = args.debug
   NODEL     = args.nodel
-  THD       =  True
-
 
   if not EXECUTE:
     print("\nDRYRUN - NO CHANGES WILL BE MADE. ADD '--run' TO MAKE CHANGES\n")
   else:
-    print("Generate TrueHD audio track from DTS-HD MA and make it the first track.")
+    print("Attempting to generate TrueHD audio tracks from DTS-HD MA.")
 
   files = []
   for path in FILEPATHS:
@@ -263,40 +250,29 @@ if __name__ == '__main__':
 
 
   print()
-  total_bytes_saved = 0
-  breakdown = []
+  modified_files = []
   for infile in files:
     if DEBUG: print("infile : ", infile)
-    cmd,saveable_bytes,kept_bytes,file_summary = gen_cmd(infile)
+    cmd, file_summary = gen_cmd(infile)
     if cmd is not None:
-      saveable_space = format_bytes(saveable_bytes)
-      total_bytes = saveable_bytes+kept_bytes
-      total_file_size = format_bytes(total_bytes)
-      if total_bytes:
-        percent_saved = int((saveable_bytes/total_bytes)*100)
-      else:
-        percent_saved = 0
-      breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size])
-      total_bytes_saved += saveable_bytes
+      modified_files.append(infile)
       print("\n--------------------------------------------------------------------------------")
+      print(f"File to modify: {infile}")
       for fs in file_summary:
         print(fs)
-      out_line = f"Space to save: {saveable_space}.  ({percent_saved}% of {total_file_size})"
+      out_line = f"A new TrueHD 5.1 track will be created and set as default."
       print(out_line)
       print("-"*len(out_line))
       print(cmd, "\n")
       if EXECUTE:
         subprocess.run(cmd, shell=True)
 
-  if total_bytes_saved == 0:
-    print("No files needed thinning")
+  if not modified_files:
+    print("No files required modification.")
   else:
-    breakdown = sorted(breakdown, key=lambda item: item[2])
-    for b in breakdown:
-      saved = f"{b[1]}"
-      percent = f"({b[3]}% of {b[4]})"
-      print(f"{saved.ljust(10)} {percent.ljust(17)} : {b[0].split('/')[-1]}")
-    if EXECUTE:
-      print(f"\nTotal Space Saved : {format_bytes(total_bytes_saved)}")
-    else:
-      print(f"\nTotal saveable space : {format_bytes(total_bytes_saved)}")
+    print("\nSummary of files to be modified:")
+    for f in modified_files:
+      print(f)
+    action = "modified" if EXECUTE else "to be modified"
+    print(f"\nTotal files {action}: {len(modified_files)}")
+
