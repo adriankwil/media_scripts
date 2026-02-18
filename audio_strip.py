@@ -215,8 +215,11 @@ def gen_cmd(infile):
       # Apply conversion to the first audio stream in the output (which is now the DTS-HD MA stream)
       cmd +=  f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 Title=\"TrueHD 5.1\""
     cmd   +=  f" \"{infile}\""
+    # set the new file timestamp to natch the original file.
     cmd   +=  f" && touch -r \"{infile}.original\" \"{infile}\""
-    if not NODEL: cmd +=  f" && rm \"{infile}.original\""
+    if not NODEL:
+      # remove the original file.
+      cmd +=  f" && rm \"{infile}.original\"" 
     return [cmd, total_saved, total_kept, file_summary, sorted(list(audio_languages_to_keep))]
 
 
@@ -325,6 +328,7 @@ if __name__ == '__main__':
   print()
   total_bytes_saved = 0
   breakdown = []
+  MIN_SAVE_BYTES = 100 * 1024 * 1024 # 100 MB
   for infile in files:
     if DEBUG: print("infile : ", infile)
     cmd,saveable_bytes,kept_bytes,file_summary,langs_kept = gen_cmd(infile)
@@ -336,6 +340,11 @@ if __name__ == '__main__':
         percent_saved = int((saveable_bytes/total_bytes)*100)
       else:
         percent_saved = 0
+ 
+      if saveable_bytes < MIN_SAVE_BYTES:
+        if DEBUG: print(f"Saveable space {saveable_space} is less than 100MB. Skipping {infile.split('/')[-1]}")
+        continue
+
       breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size])
       total_bytes_saved += saveable_bytes
       print("\n--------------------------------------------------------------------------------")
@@ -348,6 +357,7 @@ if __name__ == '__main__':
       print(cmd, "\n")
       if EXECUTE:
         subprocess.run(cmd, shell=True)
+        print("Done\n")
 
   if total_bytes_saved == 0:
     print("No files needed thinning")
