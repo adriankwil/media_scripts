@@ -332,7 +332,7 @@ if __name__ == '__main__':
     for b in breakdown:
       saved = f"{b[1]}"
       percent = f"({b[3]}% of {b[4]})"
-      thd_tag = "New THD -> " if b[5] else "           "
+      thd_tag = "" if not THD else "New THD -> " if b[5] else "           "
       print(f"{thd_tag}{saved.ljust(10)} {percent.ljust(17)} : {b[0].split('/')[-1]}")
     if EXECUTE:
       print(f"\nTotal Space Saved : {format_bytes(total_bytes_saved)}")
