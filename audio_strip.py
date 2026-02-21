@@ -182,7 +182,7 @@ def gen_cmd(infile):
   is_dtshd_ma = THD and len(wanted_indexes) > 1 and 'DTS-HD MA' in wanted_indexes[1][1]
   if non_eng_streams == 0 and not is_dtshd_ma:
     if DEBUG: print("No unwanted streams in this file and DTSHDMA->THD conversion is not applicable/enabled.")
-    return [None, None, None, None, None]
+    return [None, None, None, None, None, False]
 
   if DEBUG: print(f"\nFound {non_eng_streams} unwanted audio/sub streams with indexes: {unwanted_indexes}\n")
 
@@ -206,7 +206,7 @@ def gen_cmd(infile):
   if not NODEL:
     cmd += f" && rm \"{original}\""
 
-  return [cmd, total_saved, total_kept, file_summary, sorted(list(audio_languages_to_keep))]
+  return [cmd, total_saved, total_kept, file_summary, sorted(list(audio_languages_to_keep)), is_dtshd_ma]
 
 
 def get_files(path):
@@ -300,7 +300,7 @@ if __name__ == '__main__':
   MIN_SAVE_BYTES = 100 * 1024 * 1024  # 100 MB
   for infile in files:
     if DEBUG: print("infile : ", infile)
-    cmd, saveable_bytes, kept_bytes, file_summary, langs_kept = gen_cmd(infile)
+    cmd, saveable_bytes, kept_bytes, file_summary, langs_kept, is_dtshd_ma = gen_cmd(infile)
     if cmd is not None:
       total_bytes = saveable_bytes + kept_bytes
       saveable_space = format_bytes(saveable_bytes)
@@ -311,7 +311,7 @@ if __name__ == '__main__':
         if DEBUG: print(f"Saveable space {saveable_space} is less than 100MB. Skipping {infile.split('/')[-1]}")
         continue
 
-      breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size])
+      breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size, is_dtshd_ma])
       total_bytes_saved += saveable_bytes
       print("\n--------------------------------------------------------------------------------")
       print(f"Keeping languages: {', '.join(langs_kept)}")
@@ -332,7 +332,8 @@ if __name__ == '__main__':
     for b in breakdown:
       saved = f"{b[1]}"
       percent = f"({b[3]}% of {b[4]})"
-      print(f"{saved.ljust(10)} {percent.ljust(17)} : {b[0].split('/')[-1]}")
+      thd_tag = "New THD -> " if b[5] else ""
+      print(f"{thd_tag}{saved.ljust(10)} {percent.ljust(17)} : {b[0].split('/')[-1]}")
     if EXECUTE:
       print(f"\nTotal Space Saved : {format_bytes(total_bytes_saved)}")
     else:
