@@ -6,16 +6,16 @@ import os
 import re
 
 
-def format_bytes(bytes:int, dp:int=2) -> list:
+def format_bytes(size: int, dp: int = 2) -> str:
   '''
   Convert int number of bytes into human readable format with automatic units
   '''
   units = ["B", "KB", "MB", "GB"]
   u = 0
-  while (bytes >= 1024):
-    bytes = bytes/1024
-    u+=1
-  return f"{round(bytes, dp)}{units[u]}"
+  while size >= 1024:
+    size = size / 1024
+    u += 1
+  return f"{round(size, dp)}{units[u]}"
 
 
 def match_key(parent_key: str, match_string: str) -> str:
@@ -33,41 +33,37 @@ def probe_file(file: str):
   '''
   Get file stream information using ffprobe in JSON format.
   '''
-  cmd = f"ffprobe -v quiet -print_format json -show_format -show_streams \"{file}\""
+  cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", file]
   if DEBUG: print(f"cmd : {cmd}")
-  raw = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True).stdout
-  if DEBUG: print(f"raw ffprobe output:\n{raw}")  # raw = subprocess.run(cmd, stdout=subprocess.PIPE, text=True).stdout
-  info = json.loads(raw)
-
-  return info
+  raw = subprocess.run(cmd, stdout=subprocess.PIPE, text=True).stdout
+  if DEBUG: print(f"raw ffprobe output:\n{raw}")
+  return json.loads(raw)
 
 
-def replace_audio_names(name:str) -> str:
+def replace_audio_names(name: str) -> str:
   '''
   Convert ffmpeg output to be more human readable. Used primarily for printing out the track list.
   '''
-  if "truehd" in name.lower() and "atmos" in name.lower():
+  lower = name.lower()
+  if "truehd" in lower and "atmos" in lower:
     return "THD Atmos"
-  elif "truehd" in name.lower():
+  elif "truehd" in lower:
     return "TrueHD"
-  elif "dolby digital plus + dolby atmos" == name.lower():
+  elif lower == "dolby digital plus + dolby atmos":
     return "DD+ Atmos"
-  else:
-    return name
+  return name
 
 
 def parse_ac(ac: int) -> str:
-    '''
-    Convert the raw number of channels into human readable format.
-    eg: 2 becomes 2.0 and 6 becomes 5.1
-
-    '''
-    if ac == 0:
-      return "  "
-    elif ac > 2:
-      return f"{ac-1}.1"
-    else:
-      return F"{ac}.0"
+  '''
+  Convert the raw number of channels into human readable format.
+  eg: 2 becomes 2.0 and 6 becomes 5.1
+  '''
+  if ac == 0:
+    return "  "
+  elif ac > 2:
+    return f"{ac-1}.1"
+  return f"{ac}.0"
 
 
 def gen_cmd(infile):
@@ -77,7 +73,7 @@ def gen_cmd(infile):
   1) append '.original' to the original file
   2) use ffmpeg to delete the unwanted audio tracks
   2.1) OPTIONALLY copy the first audio track to a TrueHD 5.1 stream if it is DTS HD-MA.
-  3) OPTIONALLY and by defalt delete the original file
+  3) OPTIONALLY and by default delete the original file
   '''
   info = probe_file(infile)
   streams = info.get("streams")
@@ -85,22 +81,21 @@ def gen_cmd(infile):
   # Find the language of the first audio track
   first_audio_lang = None
   for s in streams:
-      if s.get("codec_type") == "audio":
-          tags = s.get("tags")
-          if tags and tags.get("language"):
-              first_audio_lang = tags.get("language")
-              if DEBUG: print(f"Detected first audio track language: {first_audio_lang}")
-              break # Found it, no need to look further
+    if s.get("codec_type") == "audio":
+      tags = s.get("tags")
+      if tags and tags.get("language"):
+        first_audio_lang = tags.get("language")
+        if DEBUG: print(f"Detected first audio track language: {first_audio_lang}")
+        break
 
   # Create a set of languages to keep for audio tracks
   audio_languages_to_keep = set(LANGUAGES)
   if first_audio_lang:
-      audio_languages_to_keep.add(first_audio_lang)
+    audio_languages_to_keep.add(first_audio_lang)
 
   if DEBUG:
-      print(f"Languages to keep for audio: {list(audio_languages_to_keep)}")
-      print(f"Languages to keep for subtitles: {LANGUAGES}")
-
+    print(f"Languages to keep for audio: {list(audio_languages_to_keep)}")
+    print(f"Languages to keep for subtitles: {LANGUAGES}")
 
   # print header
   file_summary = []
@@ -113,8 +108,6 @@ def gen_cmd(infile):
   total_saved = 0
   total_kept = 0
   for s in streams:
-    #if DEBUG: print(s)
-    rem = ""
     index = s.get("index")
     typ = s.get("codec_type")
     tags = s.get("tags")
@@ -127,56 +120,50 @@ def gen_cmd(infile):
       if DEBUG: print(f"No \"NUMBER_OF_BYTES\" tag found, will try to calculate size from bit rate*time")
       duration = s.get("duration")
       bit_rate = s.get("bit_rate")
-      if DEBUG: print(F"duration: {duration}, bit_rate: {bit_rate}")
+      if DEBUG: print(f"duration: {duration}, bit_rate: {bit_rate}")
       if duration and bit_rate:
-        size_bytes = (float(duration)*int(bit_rate))/8
+        size_bytes = (float(duration) * int(bit_rate)) / 8
       else:
         if DEBUG: print(f"No \"NUMBER_OF_BYTES\" tag found and unable to calculate from rate*time. Using 0.")
         size_bytes = 0
-      pass
     else:
       size_bytes = int(size_bytes)
 
     if typ != "video":
-      lang  = tags.get("language")
+      lang = tags.get("language")
     else:
       lang = "-"
 
     if typ == "audio":
-      ca    = s.get("profile")
-      if ca == None:
-        ca = s.get("codec_name")
-      ac    = s.get("channels")
+      ca = s.get("profile") or s.get("codec_name")
+      ac = s.get("channels")
     else:
-      ca,ac = "-",0
+      ca, ac = "-", 0
 
     size = format_bytes(size_bytes)
 
     # Determine if the stream should be removed
     remove_stream = False
     if typ == "audio" and lang not in audio_languages_to_keep:
-        remove_stream = True
+      remove_stream = True
     elif typ == "subtitle" and lang not in LANGUAGES:
-        remove_stream = True
+      remove_stream = True
 
     if remove_stream:
       rem = "<-remove"
       unwanted_indexes.append(index)
       total_saved += size_bytes
     else:
+      rem = ""
       wanted_indexes.append([index, ca])
       total_kept += size_bytes
 
-    if DEBUG:print(typ)
+    if DEBUG: print(typ)
 
     # replace the typ string with the audio stream profile just for audio streams
-    if typ=="audio":
-      name = replace_audio_names(ca)
-    else:
-      name = typ
+    name = replace_audio_names(ca) if typ == "audio" else typ
 
-
-    if DEBUG:print(name)
+    if DEBUG: print(name)
     audio_channels = parse_ac(ac)
     stream_summary = f"{index}\t{name.ljust(10)}{audio_channels}\t{lang}\t{size.ljust(10)}{rem}"
     file_summary.append(stream_summary)
@@ -185,77 +172,61 @@ def gen_cmd(infile):
   if DEBUG: print(f"unwanted_indexes : {unwanted_indexes}")
   if DEBUG: print(f"wanted_indexes : {wanted_indexes}")
 
-  removal = ""
-  for i in unwanted_indexes:
-    removal = removal + f"-map -0:{i} "
-
-  keep = ""
+  removal = " ".join(f"-map -0:{i}" for i in unwanted_indexes)
   # wanted_indexes[0] is the video stream, which is handled by -map 0:0
   # so we only need to map the other wanted streams
-  for i,name in wanted_indexes[1:]:
-    keep = keep + f"-map 0:{i} "
+  keep = " ".join(f"-map 0:{i}" for i, name in wanted_indexes[1:])
 
   non_eng_streams = len(unwanted_indexes)
   # Check if there are any streams to remove OR if THD conversion is requested
   is_dtshd_ma = THD and len(wanted_indexes) > 1 and 'DTS-HD MA' in wanted_indexes[1][1]
-  if (non_eng_streams == 0) and (not is_dtshd_ma):
+  if non_eng_streams == 0 and not is_dtshd_ma:
     if DEBUG: print("No unwanted streams in this file and DTSHDMA->THD conversion is not applicable/enabled.")
-    return [None,None,None,None,None]
-  else:
-    if DEBUG: print(f"\nFound {non_eng_streams} unwanted audio/sub streams with indexes: {unwanted_indexes}\n")
-    cmd   =   f"mv \"{infile}\" \"{infile}.original\""
-    cmd   +=  f" && ffmpeg -hide_banner -loglevel error -stats -i \"{infile}.original\" -map 0:0"
-    if is_dtshd_ma:
-      # Map the DTS-HD MA stream first for conversion
-      cmd +=  f" -map 0:{wanted_indexes[1][0]}"
-    cmd   +=  f" {keep}"
-    cmd   +=  f" {removal}" # Add the removal maps
-    cmd   +=  f" -c copy"
-    if is_dtshd_ma:
-      # Apply conversion to the first audio stream in the output (which is now the DTS-HD MA stream)
-      cmd +=  f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 Title=\"TrueHD 5.1\""
-    cmd   +=  f" \"{infile}\""
-    # set the new file timestamp to natch the original file.
-    cmd   +=  f" && touch -r \"{infile}.original\" \"{infile}\""
-    if not NODEL:
-      # remove the original file.
-      cmd +=  f" && rm \"{infile}.original\"" 
-    return [cmd, total_saved, total_kept, file_summary, sorted(list(audio_languages_to_keep))]
+    return [None, None, None, None, None]
+
+  if DEBUG: print(f"\nFound {non_eng_streams} unwanted audio/sub streams with indexes: {unwanted_indexes}\n")
+
+  original = f"{infile}.original"
+  cmd = f"mv \"{infile}\" \"{original}\""
+  cmd += f" && ffmpeg -hide_banner -loglevel error -stats -i \"{original}\" -map 0:0"
+  if is_dtshd_ma:
+    # Map the DTS-HD MA stream first for conversion
+    cmd += f" -map 0:{wanted_indexes[1][0]}"
+  if keep:
+    cmd += f" {keep}"
+  if removal:
+    cmd += f" {removal}"
+  cmd += f" -c copy"
+  if is_dtshd_ma:
+    # Apply conversion to the first audio stream in the output (which is now the DTS-HD MA stream)
+    cmd += f" -c:a:0 truehd -ac 6 -strict -2 -metadata:s:a:0 Title=\"TrueHD 5.1\""
+  cmd += f" \"{infile}\""
+  # set the new file timestamp to match the original file
+  cmd += f" && touch -r \"{original}\" \"{infile}\""
+  if not NODEL:
+    cmd += f" && rm \"{original}\""
+
+  return [cmd, total_saved, total_kept, file_summary, sorted(list(audio_languages_to_keep))]
 
 
 def get_files(path):
   '''
   Get all movie files in a given directory
   '''
-  extensions = ["mkv", "mp4"]
-  raw_list = []
-  for e in extensions:
-    cmd = ["find", f"{path}", "-type", "f", "-name", f"*.{e}"]
-    raw = subprocess.run(cmd, stdout=subprocess.PIPE, text=True).stdout
-    raw_list += raw.split("\n")
-  raw_list = list(filter(None, raw_list)) # remove empty items
-  if DEBUG:
-    print(len(raw_list))
-    print(raw_list)
-  to_remove = []
-  for item in raw_list:
-    if DEBUG: print(item)
-    split = item.split("/")
-    if "._" in split[-1]:
-      if DEBUG: print(f"\t removing {item}")
-      to_remove.append(item)
+  extensions = {".mkv", ".mp4"}
+  results = []
+  for root, dirs, filenames in os.walk(path):
+    for name in filenames:
+      if name.startswith("._"):
+        continue
+      ext = os.path.splitext(name)[1].lower()
+      if ext in extensions:
+        results.append(os.path.join(root, name))
 
   if DEBUG:
-    print(len(raw_list))
-    print(raw_list)
-  for tr in to_remove:
-    raw_list.remove(tr)
-  if DEBUG:
-    print(len(raw_list))
-    print(raw_list)
-
-  return raw_list
-
+    print(len(results))
+    print(results)
+  return results
 
 
 if __name__ == '__main__':
@@ -293,7 +264,6 @@ if __name__ == '__main__':
   NODEL     = args.nodel
   THD       = args.thd
 
-
   if not EXECUTE:
     print("\nDRYRUN - NO CHANGES WILL BE MADE. ADD '--run' TO MAKE CHANGES\n")
     print("Would remove all subtitle languages other than: ", ", ".join(LANGUAGES))
@@ -305,42 +275,38 @@ if __name__ == '__main__':
 
   files = []
   for path in FILEPATHS:
-      abs_path = os.path.abspath(path)
-      if os.path.isdir(abs_path):
-          print("Searching for video files in", abs_path, "(recursive)")
-          files.extend(get_files(abs_path))
-      elif os.path.isfile(abs_path):
-          files.append(abs_path)
-      else:
-          print(f"Warning: Path '{path}' is not a valid file or directory. Skipping.")
+    abs_path = os.path.abspath(path)
+    if os.path.isdir(abs_path):
+      print("Searching for video files in", abs_path, "(recursive)")
+      files.extend(get_files(abs_path))
+    elif os.path.isfile(abs_path):
+      files.append(abs_path)
+    else:
+      print(f"Warning: Path '{path}' is not a valid file or directory. Skipping.")
 
   # Remove duplicates that might occur if a file and its parent folder are both specified
-  files = sorted(list(set(files)))
+  files = sorted(set(files))
 
-  if len(files) > 0:
-      print(f"\nFound {len(files)} video file(s) to process:")
-      for f in files:
-          print(f)
+  if files:
+    print(f"\nFound {len(files)} video file(s) to process:")
+    for f in files:
+      print(f)
   else:
-      print("Found no video file(s) to process.")
-
+    print("Found no video file(s) to process.")
 
   print()
   total_bytes_saved = 0
   breakdown = []
-  MIN_SAVE_BYTES = 100 * 1024 * 1024 # 100 MB
+  MIN_SAVE_BYTES = 100 * 1024 * 1024  # 100 MB
   for infile in files:
     if DEBUG: print("infile : ", infile)
-    cmd,saveable_bytes,kept_bytes,file_summary,langs_kept = gen_cmd(infile)
+    cmd, saveable_bytes, kept_bytes, file_summary, langs_kept = gen_cmd(infile)
     if cmd is not None:
+      total_bytes = saveable_bytes + kept_bytes
       saveable_space = format_bytes(saveable_bytes)
-      total_bytes = saveable_bytes+kept_bytes
       total_file_size = format_bytes(total_bytes)
-      if total_bytes:
-        percent_saved = int((saveable_bytes/total_bytes)*100)
-      else:
-        percent_saved = 0
- 
+      percent_saved = int((saveable_bytes / total_bytes) * 100) if total_bytes else 0
+
       if saveable_bytes < MIN_SAVE_BYTES:
         if DEBUG: print(f"Saveable space {saveable_space} is less than 100MB. Skipping {infile.split('/')[-1]}")
         continue
@@ -353,7 +319,7 @@ if __name__ == '__main__':
         print(fs)
       out_line = f"Space to save: {saveable_space}.  ({percent_saved}% of {total_file_size})"
       print(out_line)
-      print("-"*len(out_line))
+      print("-" * len(out_line))
       print(cmd, "\n")
       if EXECUTE:
         subprocess.run(cmd, shell=True)
