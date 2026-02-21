@@ -17,8 +17,7 @@ apt install vim htop tmux neofetch curl man mediainfo -y
 
 # install latest version of ffmpeg as a static build
 # (because apt only has old version which doesnt work well with TrueHD and doesnt detect Atmos)
-# wget -O ~/ffmpeg.tar.xz https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz
-wget -O ~/ffmpeg.tar.xz https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+wget -O ~/ffmpeg_downloads/ffmpeg.tar.xz https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.0-latest-linux64-gpl-8.0.tar.xz
 tar -xf ~/ffmpeg.tar.xz
 mv ~/ffmpeg-*/bin/ffmpeg ~/ffmpeg-*/bin/ffprobe /usr/local/bin/.
 rm ~/ffmpeg.tar.xz
