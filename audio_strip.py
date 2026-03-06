@@ -172,6 +172,44 @@ def gen_cmd(infile):
   if DEBUG: print(f"unwanted_indexes : {unwanted_indexes}")
   if DEBUG: print(f"wanted_indexes : {wanted_indexes}")
 
+  # Determine DTS-HD MA conversion status before filtering
+  is_dtshd_ma = THD and len(wanted_indexes) > 1 and 'DTS-HD MA' in wanted_indexes[1][1]
+
+  # Keep only the first wanted audio stream, move excess audio to unwanted.
+  # In THD conversion case, the kept stream is mapped twice (THD conversion + original copy).
+  first_audio_found = False
+  excess_audio = []
+  for idx_pair in wanted_indexes:
+    stream = next((s for s in streams if s.get("index") == idx_pair[0]), None)
+    if stream and stream.get("codec_type") == "audio":
+      if first_audio_found:
+        excess_audio.append(idx_pair)
+      else:
+        first_audio_found = True
+
+  for idx_pair in excess_audio:
+    wanted_indexes.remove(idx_pair)
+    unwanted_indexes.append(idx_pair[0])
+    # Recalculate stream size for totals
+    stream = next(s for s in streams if s.get("index") == idx_pair[0])
+    tags = stream.get("tags", {})
+    size_bytes = match_key(tags, "NUMBER_OF_BYTES") if tags else None
+    if size_bytes:
+      size_bytes = int(size_bytes)
+    else:
+      duration = stream.get("duration")
+      bit_rate = stream.get("bit_rate")
+      size_bytes = int((float(duration) * int(bit_rate)) / 8) if duration and bit_rate else 0
+    total_saved += size_bytes
+    total_kept -= size_bytes
+    # Update summary line to mark as removed
+    for i, line in enumerate(file_summary):
+      if line.startswith(f"{idx_pair[0]}\t"):
+        file_summary[i] = line + "<-remove"
+        break
+
+  if DEBUG: print(f"after audio filtering - unwanted: {unwanted_indexes}, wanted: {wanted_indexes}")
+
   removal = " ".join(f"-map -0:{i}" for i in unwanted_indexes)
   # wanted_indexes[0] is the video stream, which is handled by -map 0:0
   # so we only need to map the other wanted streams
@@ -179,7 +217,6 @@ def gen_cmd(infile):
 
   non_eng_streams = len(unwanted_indexes)
   # Check if there are any streams to remove OR if THD conversion is requested
-  is_dtshd_ma = THD and len(wanted_indexes) > 1 and 'DTS-HD MA' in wanted_indexes[1][1]
   if non_eng_streams == 0 and not is_dtshd_ma:
     if DEBUG: print("No unwanted streams in this file and DTSHDMA->THD conversion is not applicable/enabled.")
     return [None, None, None, None, None, False]
