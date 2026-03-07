@@ -187,7 +187,7 @@ def gen_cmd(infile):
   already_processed = (
     len(wanted_audio) >= 2
     and "truehd" in (wanted_audio[0][1] or "").lower()
-    and wanted_audio[1][1] == "DTS-HD MA"
+    and "DTS-HD MA" in (wanted_audio[1][1] or "")
   )
   audio_keep_count = 2 if already_processed else 1
   excess_audio = wanted_audio[audio_keep_count:]
