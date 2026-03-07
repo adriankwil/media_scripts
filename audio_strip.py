@@ -228,6 +228,32 @@ def gen_cmd(infile):
 
   if DEBUG: print(f"after audio filtering - unwanted: {unwanted_indexes}, wanted: {wanted_indexes}")
 
+  # Final override: rescue any streams the user explicitly wants to keep
+  if KEEP_INDEXES:
+    for keep_idx in KEEP_INDEXES:
+      if keep_idx in unwanted_indexes:
+        unwanted_indexes.remove(keep_idx)
+        stream = next((s for s in streams if s.get("index") == keep_idx), None)
+        if stream:
+          ca = stream.get("profile") or stream.get("codec_name") or "-"
+          wanted_indexes.append([keep_idx, ca])
+          tags = stream.get("tags", {})
+          size_bytes = match_key(tags, "NUMBER_OF_BYTES") if tags else None
+          if size_bytes:
+            size_bytes = int(size_bytes)
+          else:
+            duration = stream.get("duration")
+            bit_rate = stream.get("bit_rate")
+            size_bytes = int((float(duration) * int(bit_rate)) / 8) if duration and bit_rate else 0
+          total_saved -= size_bytes
+          total_kept += size_bytes
+          for i, line in enumerate(file_summary):
+            if line.startswith(f"{keep_idx}\t") and "<-remove" in line:
+              file_summary[i] = line.replace("<-remove", "<-keep(override)")
+              break
+    wanted_indexes.sort(key=lambda x: x[0])
+    if DEBUG: print(f"after keep override - unwanted: {unwanted_indexes}, wanted: {wanted_indexes}")
+
   removal = " ".join(f"-map -0:{i}" for i in unwanted_indexes)
   # wanted_indexes[0] is the video stream, which is handled by -map 0:0
   # so we only need to map the other wanted streams
@@ -289,6 +315,10 @@ if __name__ == '__main__':
     """Turn 'eng,pol' into ['eng', 'pol'] (stripping spaces, ignoring empties)."""
     return [v.strip() for v in value.split(',') if v.strip()]
 
+  def comma_separated_ints(value: str) -> list[int]:
+    """Turn '3,4' into [3, 4] (stripping spaces, ignoring empties)."""
+    return [int(v.strip()) for v in value.split(',') if v.strip()]
+
   parser = argparse.ArgumentParser(prog='audio_strip.py',
                                    description='Remove all unwanted language audio tracks from video files to save space.\nDEFAULT BEHVAIOUR is to DRY-RUN, making no changes.\nRequires ffmpeg installed, ideally version 7.1+ for good TrueHD compatibility (libavcodec 61.19.101 has been used for development)', formatter_class=argparse.RawTextHelpFormatter)
   parser.add_argument('filepaths',
@@ -311,6 +341,11 @@ if __name__ == '__main__':
   parser.add_argument('--thd',
                       action='store_true',
                       help='Set this to check if the first audio track is DTSHD-MA and convert it to be TrueHD 5.1, and set it as the first audio track')
+  parser.add_argument('-k',
+                      '--keep',
+                      type=comma_separated_ints,
+                      default=[],
+                      help='Stream indexes to force-keep as a final override after all automatic filtering, comma-separated. eg: -k 3,4')
   args = parser.parse_args()
   FILEPATHS = args.filepaths
   LANGUAGES = args.languages
@@ -318,6 +353,7 @@ if __name__ == '__main__':
   DEBUG     = args.debug
   NODEL     = args.nodel
   THD       = args.thd
+  KEEP_INDEXES = args.keep
 
   if not EXECUTE:
     print("\nDRYRUN - NO CHANGES WILL BE MADE. ADD '--run' TO MAKE CHANGES\n")
