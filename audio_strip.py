@@ -183,26 +183,17 @@ def gen_cmd(infile):
     if stream and stream.get("codec_type") == "audio":
       wanted_audio.append(idx_pair)
 
-  # Detect already-processed files: first audio is TrueHD, second is DTS-HD MA
-  already_processed = (
-    len(wanted_audio) >= 2
-    and "truehd" in (wanted_audio[0][1] or "").lower()
-    and "DTS-HD MA" in (wanted_audio[1][1] or "")
-  )
-  # Keep the first audio stream per language, plus both THD+DTS-HD MA if already processed
+  # Keep the first audio stream per language, plus all TrueHD and DTS-HD MA streams of kept languages
   seen_languages = set()
   excess_audio = []
   for i, idx_pair in enumerate(wanted_audio):
-    if already_processed and i < 2:
-      stream = next(s for s in streams if s.get("index") == idx_pair[0])
-      lang = stream.get("tags", {}).get("language")
-      seen_languages.add(lang)
-      continue
     stream = next(s for s in streams if s.get("index") == idx_pair[0])
     lang = stream.get("tags", {}).get("language")
+    codec = idx_pair[1] or ""
+    is_thd_or_dtshdma = "truehd" in codec.lower() or "DTS-HD MA" in codec
     if lang not in seen_languages:
       seen_languages.add(lang)
-    else:
+    elif not is_thd_or_dtshdma:
       excess_audio.append(idx_pair)
 
   for idx_pair in excess_audio:
