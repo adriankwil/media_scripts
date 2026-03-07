@@ -175,17 +175,22 @@ def gen_cmd(infile):
   # Determine DTS-HD MA conversion status before filtering
   is_dtshd_ma = THD and len(wanted_indexes) > 1 and 'DTS-HD MA' in wanted_indexes[1][1]
 
-  # Keep only the first wanted audio stream, move excess audio to unwanted.
+  # Keep only the necessary audio streams, move excess audio to unwanted.
   # In THD conversion case, the kept stream is mapped twice (THD conversion + original copy).
-  first_audio_found = False
-  excess_audio = []
+  wanted_audio = []
   for idx_pair in wanted_indexes:
     stream = next((s for s in streams if s.get("index") == idx_pair[0]), None)
     if stream and stream.get("codec_type") == "audio":
-      if first_audio_found:
-        excess_audio.append(idx_pair)
-      else:
-        first_audio_found = True
+      wanted_audio.append(idx_pair)
+
+  # Detect already-processed files: first audio is TrueHD, second is DTS-HD MA
+  already_processed = (
+    len(wanted_audio) >= 2
+    and "truehd" in (wanted_audio[0][1] or "").lower()
+    and wanted_audio[1][1] == "DTS-HD MA"
+  )
+  audio_keep_count = 2 if already_processed else 1
+  excess_audio = wanted_audio[audio_keep_count:]
 
   for idx_pair in excess_audio:
     wanted_indexes.remove(idx_pair)
