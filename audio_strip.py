@@ -360,9 +360,9 @@ if __name__ == '__main__':
   parser.add_argument('--nodel',
                       action='store_true',
                       help='Set this to not delete the original video and just keep it with a .original appendix')
-  parser.add_argument('--thd',
-                      action='store_true',
-                      help='Set this to check if the first audio track is DTSHD-MA and convert it to be TrueHD 5.1, and set it as the first audio track')
+  parser.add_argument('--nothd',
+                      action='store_false',
+                      help='Use this flag to isable checking if the first audio track is DTSHD-MA, converting it to TrueHD 5.1, and seting it as the first audio track. It does that by default, this flag turnss that off.')
   parser.add_argument('-k',
                       '--keep',
                       type=comma_separated_ints,
@@ -379,7 +379,7 @@ if __name__ == '__main__':
   EXECUTE   = args.run
   DEBUG     = args.debug
   NODEL     = args.nodel
-  THD       = args.thd
+  THD       = args.nothd
   KEEP_INDEXES = args.keep
   REMOVE_INDEXES = args.remove
 
