@@ -254,6 +254,31 @@ def gen_cmd(infile):
     wanted_indexes.sort(key=lambda x: x[0])
     if DEBUG: print(f"after keep override - unwanted: {unwanted_indexes}, wanted: {wanted_indexes}")
 
+  # Final override: force-remove any streams the user explicitly wants removed
+  if REMOVE_INDEXES:
+    for rem_idx in REMOVE_INDEXES:
+      match = [pair for pair in wanted_indexes if pair[0] == rem_idx]
+      if match:
+        wanted_indexes.remove(match[0])
+        unwanted_indexes.append(rem_idx)
+        stream = next((s for s in streams if s.get("index") == rem_idx), None)
+        if stream:
+          tags = stream.get("tags", {})
+          size_bytes = match_key(tags, "NUMBER_OF_BYTES") if tags else None
+          if size_bytes:
+            size_bytes = int(size_bytes)
+          else:
+            duration = stream.get("duration")
+            bit_rate = stream.get("bit_rate")
+            size_bytes = int((float(duration) * int(bit_rate)) / 8) if duration and bit_rate else 0
+          total_saved += size_bytes
+          total_kept -= size_bytes
+          for i, line in enumerate(file_summary):
+            if line.startswith(f"{rem_idx}\t") and "<-remove" not in line:
+              file_summary[i] = line + "<-remove(override)"
+              break
+    if DEBUG: print(f"after remove override - unwanted: {unwanted_indexes}, wanted: {wanted_indexes}")
+
   # wanted_indexes[0] is the video stream, which is handled by -map 0:0
   # so we only need to map the other wanted streams
   keep = " ".join(f"-map 0:{i}" for i, name in wanted_indexes[1:])
@@ -343,6 +368,11 @@ if __name__ == '__main__':
                       type=comma_separated_ints,
                       default=[],
                       help='Stream indexes to force-keep as a final override after all automatic filtering, comma-separated. eg: -k 3,4')
+  parser.add_argument('-r',
+                      '--remove',
+                      type=comma_separated_ints,
+                      default=[],
+                      help='Stream indexes to force-remove as a final override after all automatic filtering, comma-separated. eg: -r 3,4')
   args = parser.parse_args()
   FILEPATHS = args.filepaths
   LANGUAGES = args.languages
@@ -351,6 +381,7 @@ if __name__ == '__main__':
   NODEL     = args.nodel
   THD       = args.thd
   KEEP_INDEXES = args.keep
+  REMOVE_INDEXES = args.remove
 
   if not EXECUTE:
     print("\nDRYRUN - NO CHANGES WILL BE MADE. ADD '--run' TO MAKE CHANGES\n")
