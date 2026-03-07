@@ -189,8 +189,21 @@ def gen_cmd(infile):
     and "truehd" in (wanted_audio[0][1] or "").lower()
     and "DTS-HD MA" in (wanted_audio[1][1] or "")
   )
-  audio_keep_count = 2 if already_processed else 1
-  excess_audio = wanted_audio[audio_keep_count:]
+  # Keep the first audio stream per language, plus both THD+DTS-HD MA if already processed
+  seen_languages = set()
+  excess_audio = []
+  for i, idx_pair in enumerate(wanted_audio):
+    if already_processed and i < 2:
+      stream = next(s for s in streams if s.get("index") == idx_pair[0])
+      lang = stream.get("tags", {}).get("language")
+      seen_languages.add(lang)
+      continue
+    stream = next(s for s in streams if s.get("index") == idx_pair[0])
+    lang = stream.get("tags", {}).get("language")
+    if lang not in seen_languages:
+      seen_languages.add(lang)
+    else:
+      excess_audio.append(idx_pair)
 
   for idx_pair in excess_audio:
     wanted_indexes.remove(idx_pair)
