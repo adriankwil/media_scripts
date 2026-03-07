@@ -254,7 +254,6 @@ def gen_cmd(infile):
     wanted_indexes.sort(key=lambda x: x[0])
     if DEBUG: print(f"after keep override - unwanted: {unwanted_indexes}, wanted: {wanted_indexes}")
 
-  removal = " ".join(f"-map -0:{i}" for i in unwanted_indexes)
   # wanted_indexes[0] is the video stream, which is handled by -map 0:0
   # so we only need to map the other wanted streams
   keep = " ".join(f"-map 0:{i}" for i, name in wanted_indexes[1:])
@@ -275,8 +274,6 @@ def gen_cmd(infile):
     cmd += f" -map 0:{wanted_indexes[1][0]}"
   if keep:
     cmd += f" {keep}"
-  if removal:
-    cmd += f" {removal}"
   cmd += f" -c copy"
   if is_dtshd_ma:
     # Apply conversion to the first audio stream in the output (which is now the DTS-HD MA stream)
