@@ -447,11 +447,8 @@ if __name__ == '__main__':
         subprocess.run(cmd, shell=True)
         print("Done\n")
 
-  thd_conversions = sum(1 for b in breakdown if b[5])
-  if total_bytes_saved == 0 and thd_conversions == 0:
+  if not breakdown:
     print("No files needed thinning")
-  elif total_bytes_saved == 0:
-    print(f"No files needed thinning, but {thd_conversions} file(s) had DTS-HD MA -> TrueHD conversion")
   else:
     breakdown = sorted(breakdown, key=lambda item: item[2])
     for b in breakdown:
@@ -459,7 +456,8 @@ if __name__ == '__main__':
       percent = f"({b[3]}% of {b[4]})"
       thd_tag = "" if not THD else "New THD -> " if b[5] else "           "
       print(f"{thd_tag}{saved.ljust(10)} {percent.ljust(17)} : {b[0].split('/')[-1]}")
-    if EXECUTE:
-      print(f"\nTotal Space Saved : {format_bytes(total_bytes_saved)}")
-    else:
-      print(f"\nTotal saveable space : {format_bytes(total_bytes_saved)}")
+    if total_bytes_saved > 0:
+      if EXECUTE:
+        print(f"\nTotal Space Saved : {format_bytes(total_bytes_saved)}")
+      else:
+        print(f"\nTotal saveable space : {format_bytes(total_bytes_saved)}")
