@@ -332,6 +332,14 @@ if __name__ == '__main__':
     """Turn '3,4' into [3, 4] (stripping spaces, ignoring empties)."""
     return [int(v.strip()) for v in value.split(',') if v.strip()]
 
+  def parse_size(value: str) -> int:
+    """Turn '500m' into bytes (500*1024*1024), '1g' into 1*1024*1024*1024, etc."""
+    value = value.strip().lower()
+    multipliers = {'b': 1, 'k': 1024, 'm': 1024**2, 'g': 1024**3}
+    if value[-1] in multipliers:
+      return int(float(value[:-1]) * multipliers[value[-1]])
+    return int(value)
+
   parser = argparse.ArgumentParser(prog='audio_strip.py',
                                    description='Remove all unwanted language audio tracks from video files to save space.\nDEFAULT BEHVAIOUR is to DRY-RUN, making no changes.\nRequires ffmpeg installed, ideally version 7.1+ for good TrueHD compatibility (libavcodec 61.19.101 has been used for development)', formatter_class=argparse.RawTextHelpFormatter)
   parser.add_argument('filepaths',
@@ -364,6 +372,10 @@ if __name__ == '__main__':
                       type=comma_separated_ints,
                       default=[],
                       help='Stream indexes to force-remove as a final override after all automatic filtering, comma-separated. eg: -r 3,4')
+  parser.add_argument('--minsave',
+                      type=parse_size,
+                      default='100m',
+                      help='Ignore files where the total space saving is less than this value. Supports suffixes: b, k, m, g. eg: 500m, 1g. Default: 100m')
   args = parser.parse_args()
   FILEPATHS = args.filepaths
   LANGUAGES = args.languages
@@ -407,7 +419,7 @@ if __name__ == '__main__':
   print()
   total_bytes_saved = 0
   breakdown = []
-  MIN_SAVE_BYTES = 100 * 1024 * 1024  # 100 MB
+  MIN_SAVE_BYTES = args.minsave
   for infile in files:
     if DEBUG: print("infile : ", infile)
     cmd, saveable_bytes, kept_bytes, file_summary, langs_kept, is_dtshd_ma = gen_cmd(infile)
@@ -418,7 +430,7 @@ if __name__ == '__main__':
       percent_saved = int((saveable_bytes / total_bytes) * 100) if total_bytes else 0
 
       if saveable_bytes < MIN_SAVE_BYTES:
-        if DEBUG: print(f"Saveable space {saveable_space} is less than 100MB. Skipping {infile.split('/')[-1]}")
+        if DEBUG: print(f"Saveable space {saveable_space} is less than {format_bytes(MIN_SAVE_BYTES)}. Skipping {infile.split('/')[-1]}")
         continue
 
       breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size, is_dtshd_ma])
