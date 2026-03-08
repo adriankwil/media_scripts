@@ -429,8 +429,8 @@ if __name__ == '__main__':
       total_file_size = format_bytes(total_bytes)
       percent_saved = int((saveable_bytes / total_bytes) * 100) if total_bytes else 0
 
-      if saveable_bytes < MIN_SAVE_BYTES:
-        if DEBUG: print(f"Saveable space {saveable_space} is less than {format_bytes(MIN_SAVE_BYTES)}. Skipping {infile.split('/')[-1]}")
+      if saveable_bytes < MIN_SAVE_BYTES and not is_dtshd_ma:
+        if DEBUG: print(f"Saveable space {saveable_space} is less than {format_bytes(MIN_SAVE_BYTES)} and no THD conversion needed. Skipping {infile.split('/')[-1]}")
         continue
 
       breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size, is_dtshd_ma])
@@ -447,8 +447,11 @@ if __name__ == '__main__':
         subprocess.run(cmd, shell=True)
         print("Done\n")
 
-  if total_bytes_saved == 0:
+  thd_conversions = sum(1 for b in breakdown if b[5])
+  if total_bytes_saved == 0 and thd_conversions == 0:
     print("No files needed thinning")
+  elif total_bytes_saved == 0:
+    print(f"No files needed thinning, but {thd_conversions} file(s) had DTS-HD MA -> TrueHD conversion")
   else:
     breakdown = sorted(breakdown, key=lambda item: item[2])
     for b in breakdown:
