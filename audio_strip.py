@@ -175,6 +175,19 @@ def gen_cmd(infile):
   # Determine DTS-HD MA conversion status before filtering
   is_dtshd_ma = THD and len(wanted_indexes) > 1 and 'DTS-HD MA' in wanted_indexes[1][1]
 
+  # Calculate the size of the new TrueHD stream (assumed same as the DTS-HD MA source)
+  thd_added_bytes = 0
+  if is_dtshd_ma:
+    thd_stream = next(s for s in streams if s.get("index") == wanted_indexes[1][0])
+    thd_tags = thd_stream.get("tags", {})
+    thd_size = match_key(thd_tags, "NUMBER_OF_BYTES") if thd_tags else None
+    if thd_size:
+      thd_added_bytes = int(thd_size)
+    else:
+      duration = thd_stream.get("duration")
+      bit_rate = thd_stream.get("bit_rate")
+      thd_added_bytes = int((float(duration) * int(bit_rate)) / 8) if duration and bit_rate else 0
+
   # Keep only the necessary audio streams, move excess audio to unwanted.
   # In THD conversion case, the kept stream is mapped twice (THD conversion + original copy).
   wanted_audio = []
@@ -278,7 +291,7 @@ def gen_cmd(infile):
   # Check if there are any streams to remove OR if THD conversion is requested
   if non_eng_streams == 0 and not is_dtshd_ma:
     if DEBUG: print("No unwanted streams in this file and DTSHDMA->THD conversion is not applicable/enabled.")
-    return [None, None, None, None, None, False]
+    return [None, None, None, None, None, False, 0]
 
   if DEBUG: print(f"\nFound {non_eng_streams} unwanted audio/sub streams with indexes: {unwanted_indexes}\n")
 
@@ -300,7 +313,7 @@ def gen_cmd(infile):
   if not NODEL:
     cmd += f" && rm \"{original}\""
 
-  return [cmd, total_saved, total_kept, file_summary, sorted(list(audio_languages_to_keep)), is_dtshd_ma]
+  return [cmd, total_saved, total_kept, file_summary, sorted(list(audio_languages_to_keep)), is_dtshd_ma, thd_added_bytes]
 
 
 def get_files(path):
@@ -422,9 +435,10 @@ if __name__ == '__main__':
   MIN_SAVE_BYTES = args.minsave
   for infile in files:
     if DEBUG: print("infile : ", infile)
-    cmd, saveable_bytes, kept_bytes, file_summary, langs_kept, is_dtshd_ma = gen_cmd(infile)
+    cmd, saveable_bytes, kept_bytes, file_summary, langs_kept, is_dtshd_ma, thd_added_bytes = gen_cmd(infile)
     if cmd is not None:
       total_bytes = saveable_bytes + kept_bytes
+      net_saved_bytes = saveable_bytes - thd_added_bytes
       saveable_space = format_bytes(saveable_bytes)
       total_file_size = format_bytes(total_bytes)
       percent_saved = int((saveable_bytes / total_bytes) * 100) if total_bytes else 0
@@ -433,13 +447,16 @@ if __name__ == '__main__':
         if DEBUG: print(f"Saveable space {saveable_space} is less than {format_bytes(MIN_SAVE_BYTES)} and no THD conversion needed. Skipping {infile.split('/')[-1]}")
         continue
 
-      breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size, is_dtshd_ma])
-      total_bytes_saved += saveable_bytes
+      breakdown.append([infile, saveable_space, saveable_bytes, percent_saved, total_file_size, is_dtshd_ma, thd_added_bytes])
+      total_bytes_saved += net_saved_bytes
       print("\n--------------------------------------------------------------------------------")
       print(f"Keeping languages: {', '.join(langs_kept)}")
       for fs in file_summary:
         print(fs)
       out_line = f"Space to save: {saveable_space}.  ({percent_saved}% of {total_file_size})"
+      if thd_added_bytes > 0:
+        out_line += f"  New THD track: +{format_bytes(thd_added_bytes)}"
+        out_line += f"  Net: {format_bytes(abs(net_saved_bytes))}" + (" saved" if net_saved_bytes >= 0 else " added")
       print(out_line)
       print("-" * len(out_line))
       print(cmd, "\n")
@@ -450,14 +467,16 @@ if __name__ == '__main__':
   if not breakdown:
     print("No files needed thinning")
   else:
-    breakdown = sorted(breakdown, key=lambda item: item[2])
+    breakdown = sorted(breakdown, key=lambda item: item[2] - item[6])
     for b in breakdown:
-      saved = f"{b[1]}"
+      net = b[2] - b[6]
+      net_str = format_bytes(abs(net)) + (" saved" if net >= 0 else " added")
       percent = f"({b[3]}% of {b[4]})"
       thd_tag = "" if not THD else "New THD -> " if b[5] else "           "
-      print(f"{thd_tag}{saved.ljust(10)} {percent.ljust(17)} : {b[0].split('/')[-1]}")
-    if total_bytes_saved > 0:
+      print(f"{thd_tag}{net_str.ljust(18)} {percent.ljust(17)} : {b[0].split('/')[-1]}")
+    if total_bytes_saved != 0:
+      net_label = "Saved" if total_bytes_saved >= 0 else "Added"
       if EXECUTE:
-        print(f"\nTotal Space Saved : {format_bytes(total_bytes_saved)}")
+        print(f"\nTotal Space {net_label} : {format_bytes(abs(total_bytes_saved))}")
       else:
-        print(f"\nTotal saveable space : {format_bytes(total_bytes_saved)}")
+        print(f"\nTotal net space change : {format_bytes(abs(total_bytes_saved))} {net_label.lower()}")
