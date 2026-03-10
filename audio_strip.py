@@ -78,20 +78,18 @@ def gen_cmd(infile):
   info = probe_file(infile)
   streams = info.get("streams")
 
-  # Find the language of the first audio track
-  first_audio_lang = None
-  for s in streams:
-    if s.get("codec_type") == "audio":
-      tags = s.get("tags")
-      if tags and tags.get("language"):
-        first_audio_lang = tags.get("language")
-        if DEBUG: print(f"Detected first audio track language: {first_audio_lang}")
-        break
-
   # Create a set of languages to keep for audio tracks
   audio_languages_to_keep = set(LANGUAGES)
-  if first_audio_lang:
-    audio_languages_to_keep.add(first_audio_lang)
+  if not LANGUAGES_EXPLICIT:
+    # Auto-detect: also keep the first audio track's language
+    for s in streams:
+      if s.get("codec_type") == "audio":
+        tags = s.get("tags")
+        if tags and tags.get("language"):
+          first_audio_lang = tags.get("language")
+          if DEBUG: print(f"Detected first audio track language: {first_audio_lang}")
+          audio_languages_to_keep.add(first_audio_lang)
+          break
 
   if DEBUG:
     print(f"Languages to keep for audio: {list(audio_languages_to_keep)}")
@@ -361,8 +359,8 @@ if __name__ == '__main__':
   parser.add_argument('-l',
                       '--languages',
                       type=comma_separated_list,
-                      default=['eng'],
-                      help='Languages to keep for subtitles. Audio tracks for these languages will also be kept, in addition to the language of the first audio track. Default is eng')
+                      default=None,
+                      help='Languages to keep. When explicitly given, applies to BOTH audio and subtitles with no auto-detection. When omitted, defaults to eng for subtitles and auto-detects the first audio track\'s language')
   parser.add_argument('--run',
                       action='store_true',
                       help='Actually run the commands. Default is False and will just print the commands to be run ')
@@ -391,7 +389,12 @@ if __name__ == '__main__':
                       help='Ignore files where the total space saving is less than this value. Supports suffixes: b, k, m, g. eg: 500m, 1g. Default: 100m')
   args = parser.parse_args()
   FILEPATHS = args.filepaths
-  LANGUAGES = args.languages
+  if args.languages is None:
+    LANGUAGES = ['eng']
+    LANGUAGES_EXPLICIT = False
+  else:
+    LANGUAGES = args.languages
+    LANGUAGES_EXPLICIT = True
   EXECUTE   = args.run
   DEBUG     = args.debug
   NODEL     = args.nodel
@@ -401,8 +404,11 @@ if __name__ == '__main__':
 
   if not EXECUTE:
     print("\nDRYRUN - NO CHANGES WILL BE MADE. ADD '--run' TO MAKE CHANGES\n")
-    print("Would remove all subtitle languages other than: ", ", ".join(LANGUAGES))
-    print("Would also keep audio tracks matching the first audio track's language.")
+    if LANGUAGES_EXPLICIT:
+      print(f"Would keep only [{', '.join(LANGUAGES)}] for both audio and subtitles (no auto-detection)")
+    else:
+      print("Would remove all subtitle languages other than: ", ", ".join(LANGUAGES))
+      print("Would also keep audio tracks matching the first audio track's language.")
   else:
     print("Processing files...")
     if THD:
