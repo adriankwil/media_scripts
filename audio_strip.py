@@ -95,7 +95,7 @@ def gen_cmd(infile):
 
   if DEBUG:
     print(f"Languages to keep for audio: {list(audio_languages_to_keep)}")
-    print(f"Languages to keep for subtitles: {list(audio_languages_to_keep)}")
+    print(f"Languages to keep for subtitles: {LANGUAGES}")
 
   # print header
   file_summary = []
@@ -146,7 +146,7 @@ def gen_cmd(infile):
     remove_stream = False
     if typ == "audio" and lang not in audio_languages_to_keep:
       remove_stream = True
-    elif typ == "subtitle" and lang not in audio_languages_to_keep:
+    elif typ == "subtitle" and lang not in LANGUAGES:
       remove_stream = True
 
     if remove_stream:
@@ -362,7 +362,7 @@ if __name__ == '__main__':
                       '--languages',
                       type=comma_separated_list,
                       default=['eng'],
-                      help='Languages to keep for audio and subtitles. The language of the first audio track is also always kept. Default is eng')
+                      help='Languages to keep for subtitles. Audio tracks for these languages will also be kept, in addition to the language of the first audio track. Default is eng')
   parser.add_argument('--run',
                       action='store_true',
                       help='Actually run the commands. Default is False and will just print the commands to be run ')
@@ -401,8 +401,8 @@ if __name__ == '__main__':
 
   if not EXECUTE:
     print("\nDRYRUN - NO CHANGES WILL BE MADE. ADD '--run' TO MAKE CHANGES\n")
-    print("Would remove all audio/subtitle languages other than: ", ", ".join(LANGUAGES))
-    print("Would also keep the first audio track's language.")
+    print("Would remove all subtitle languages other than: ", ", ".join(LANGUAGES))
+    print("Would also keep audio tracks matching the first audio track's language.")
   else:
     print("Processing files...")
     if THD:
